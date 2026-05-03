@@ -12,7 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as GamesIndexRouteImport } from './routes/games/index'
-import { Route as GamesGameIdRouteImport } from './routes/games/$gameId'
+import { Route as GamesSlugRouteImport } from './routes/games/$slug'
+import { Route as GamesSlugIndexRouteImport } from './routes/games/$slug/index'
+import { Route as GamesSlugRelatedRouteImport } from './routes/games/$slug/related'
+import { Route as GamesSlugOverviewRouteImport } from './routes/games/$slug/overview'
+import { Route as GamesSlugCommunityRouteImport } from './routes/games/$slug/community'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const ProfileRoute = ProfileRouteImport.update({
@@ -30,10 +34,30 @@ const GamesIndexRoute = GamesIndexRouteImport.update({
   path: '/games/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const GamesGameIdRoute = GamesGameIdRouteImport.update({
-  id: '/games/$gameId',
-  path: '/games/$gameId',
+const GamesSlugRoute = GamesSlugRouteImport.update({
+  id: '/games/$slug',
+  path: '/games/$slug',
   getParentRoute: () => rootRouteImport,
+} as any)
+const GamesSlugIndexRoute = GamesSlugIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GamesSlugRoute,
+} as any)
+const GamesSlugRelatedRoute = GamesSlugRelatedRouteImport.update({
+  id: '/related',
+  path: '/related',
+  getParentRoute: () => GamesSlugRoute,
+} as any)
+const GamesSlugOverviewRoute = GamesSlugOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => GamesSlugRoute,
+} as any)
+const GamesSlugCommunityRoute = GamesSlugCommunityRouteImport.update({
+  id: '/community',
+  path: '/community',
+  getParentRoute: () => GamesSlugRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
@@ -44,43 +68,75 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/profile': typeof ProfileRoute
-  '/games/$gameId': typeof GamesGameIdRoute
+  '/games/$slug': typeof GamesSlugRouteWithChildren
   '/games/': typeof GamesIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/games/$slug/community': typeof GamesSlugCommunityRoute
+  '/games/$slug/overview': typeof GamesSlugOverviewRoute
+  '/games/$slug/related': typeof GamesSlugRelatedRoute
+  '/games/$slug/': typeof GamesSlugIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/profile': typeof ProfileRoute
-  '/games/$gameId': typeof GamesGameIdRoute
   '/games': typeof GamesIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/games/$slug/community': typeof GamesSlugCommunityRoute
+  '/games/$slug/overview': typeof GamesSlugOverviewRoute
+  '/games/$slug/related': typeof GamesSlugRelatedRoute
+  '/games/$slug': typeof GamesSlugIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/profile': typeof ProfileRoute
-  '/games/$gameId': typeof GamesGameIdRoute
+  '/games/$slug': typeof GamesSlugRouteWithChildren
   '/games/': typeof GamesIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/games/$slug/community': typeof GamesSlugCommunityRoute
+  '/games/$slug/overview': typeof GamesSlugOverviewRoute
+  '/games/$slug/related': typeof GamesSlugRelatedRoute
+  '/games/$slug/': typeof GamesSlugIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/profile' | '/games/$gameId' | '/games/' | '/api/auth/$'
+  fullPaths:
+    | '/'
+    | '/profile'
+    | '/games/$slug'
+    | '/games/'
+    | '/api/auth/$'
+    | '/games/$slug/community'
+    | '/games/$slug/overview'
+    | '/games/$slug/related'
+    | '/games/$slug/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/profile' | '/games/$gameId' | '/games' | '/api/auth/$'
+  to:
+    | '/'
+    | '/profile'
+    | '/games'
+    | '/api/auth/$'
+    | '/games/$slug/community'
+    | '/games/$slug/overview'
+    | '/games/$slug/related'
+    | '/games/$slug'
   id:
     | '__root__'
     | '/'
     | '/profile'
-    | '/games/$gameId'
+    | '/games/$slug'
     | '/games/'
     | '/api/auth/$'
+    | '/games/$slug/community'
+    | '/games/$slug/overview'
+    | '/games/$slug/related'
+    | '/games/$slug/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProfileRoute: typeof ProfileRoute
-  GamesGameIdRoute: typeof GamesGameIdRoute
+  GamesSlugRoute: typeof GamesSlugRouteWithChildren
   GamesIndexRoute: typeof GamesIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
@@ -108,12 +164,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GamesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/games/$gameId': {
-      id: '/games/$gameId'
-      path: '/games/$gameId'
-      fullPath: '/games/$gameId'
-      preLoaderRoute: typeof GamesGameIdRouteImport
+    '/games/$slug': {
+      id: '/games/$slug'
+      path: '/games/$slug'
+      fullPath: '/games/$slug'
+      preLoaderRoute: typeof GamesSlugRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/games/$slug/': {
+      id: '/games/$slug/'
+      path: '/'
+      fullPath: '/games/$slug/'
+      preLoaderRoute: typeof GamesSlugIndexRouteImport
+      parentRoute: typeof GamesSlugRoute
+    }
+    '/games/$slug/related': {
+      id: '/games/$slug/related'
+      path: '/related'
+      fullPath: '/games/$slug/related'
+      preLoaderRoute: typeof GamesSlugRelatedRouteImport
+      parentRoute: typeof GamesSlugRoute
+    }
+    '/games/$slug/overview': {
+      id: '/games/$slug/overview'
+      path: '/overview'
+      fullPath: '/games/$slug/overview'
+      preLoaderRoute: typeof GamesSlugOverviewRouteImport
+      parentRoute: typeof GamesSlugRoute
+    }
+    '/games/$slug/community': {
+      id: '/games/$slug/community'
+      path: '/community'
+      fullPath: '/games/$slug/community'
+      preLoaderRoute: typeof GamesSlugCommunityRouteImport
+      parentRoute: typeof GamesSlugRoute
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -125,10 +209,28 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface GamesSlugRouteChildren {
+  GamesSlugCommunityRoute: typeof GamesSlugCommunityRoute
+  GamesSlugOverviewRoute: typeof GamesSlugOverviewRoute
+  GamesSlugRelatedRoute: typeof GamesSlugRelatedRoute
+  GamesSlugIndexRoute: typeof GamesSlugIndexRoute
+}
+
+const GamesSlugRouteChildren: GamesSlugRouteChildren = {
+  GamesSlugCommunityRoute: GamesSlugCommunityRoute,
+  GamesSlugOverviewRoute: GamesSlugOverviewRoute,
+  GamesSlugRelatedRoute: GamesSlugRelatedRoute,
+  GamesSlugIndexRoute: GamesSlugIndexRoute,
+}
+
+const GamesSlugRouteWithChildren = GamesSlugRoute._addFileChildren(
+  GamesSlugRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProfileRoute: ProfileRoute,
-  GamesGameIdRoute: GamesGameIdRoute,
+  GamesSlugRoute: GamesSlugRouteWithChildren,
   GamesIndexRoute: GamesIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }

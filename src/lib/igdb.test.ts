@@ -8,6 +8,7 @@ describe("igdb game mapping", () => {
 
     const game = mapIgdbGame({
       id: 1942,
+      slug: "hollow-knight",
       name: "Hollow Knight",
       summary: "Descend into Hallownest.",
       first_release_date: 1501545600,
@@ -32,6 +33,7 @@ describe("igdb game mapping", () => {
       similar_games: [
         {
           id: 2,
+          slug: "celeste",
           name: "Celeste",
           rating: 88,
           cover: { image_id: "co2" },
@@ -41,6 +43,7 @@ describe("igdb game mapping", () => {
 
     expect(game).toStrictEqual({
       id: 1942,
+      slug: "hollow-knight",
       name: "Hollow Knight",
       summary: "Descend into Hallownest.",
       releaseDate: "2017-08-01",
@@ -60,6 +63,7 @@ describe("igdb game mapping", () => {
       similarGames: [
         {
           id: 2,
+          slug: "celeste",
           name: "Celeste",
           rating: 88,
           coverUrl: "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co2.jpg",
@@ -78,6 +82,7 @@ describe("igdb game mapping", () => {
 
     expect(game).toStrictEqual({
       id: 3,
+      slug: "3",
       name: "Untitled Game",
       summary: "No summary is available for this game yet.",
       releaseDate: "Unknown",

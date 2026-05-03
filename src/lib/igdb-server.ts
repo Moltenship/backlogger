@@ -79,15 +79,19 @@ async function igdbRequest<T>(endpoint: string, query: string) {
   return (await response.json()) as T;
 }
 
-async function fetchGameById(gameId: number): Promise<IgdbGamePage | null> {
+function escapeApicalypseString(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+async function fetchGameBySlug(slug: string): Promise<IgdbGamePage | null> {
   const games = await igdbRequest<IgdbGameResponse[]>(
     "games",
     [
-      "fields name,summary,first_release_date,rating,aggregated_rating,",
+      "fields name,slug,summary,first_release_date,rating,aggregated_rating,",
       "cover.image_id,screenshots.image_id,genres.name,platforms.name,platforms.abbreviation,",
       "involved_companies.developer,involved_companies.publisher,involved_companies.company.name,",
-      "similar_games.name,similar_games.rating,similar_games.cover.image_id;",
-      `where id = ${gameId};`,
+      "similar_games.name,similar_games.slug,similar_games.rating,similar_games.cover.image_id;",
+      `where slug = "${escapeApicalypseString(slug)}";`,
       "limit 1;",
     ].join(" "),
   );
@@ -96,20 +100,20 @@ async function fetchGameById(gameId: number): Promise<IgdbGamePage | null> {
 }
 
 export const getIgdbGame = createServerFn({ method: "GET" })
-  .inputValidator((data: { gameId: string }) => data)
+  .inputValidator((data: { slug: string }) => data)
   .handler(async ({ data }) => {
-    const gameId = Number.parseInt(data.gameId, 10);
+    const slug = data.slug.trim();
 
-    if (!Number.isFinite(gameId) || gameId <= 0) {
+    if (!slug) {
       return {
         game: null,
-        error: "Invalid IGDB game id.",
+        error: "Invalid IGDB game slug.",
       };
     }
 
     try {
       return {
-        game: await fetchGameById(gameId),
+        game: await fetchGameBySlug(slug),
         error: null,
       };
     } catch (error) {

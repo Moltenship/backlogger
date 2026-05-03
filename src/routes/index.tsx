@@ -19,8 +19,8 @@ function App() {
             screenshots, similar games, and mocked friends activity.
           </p>
           <Link
-            to="/games/$gameId"
-            params={{ gameId: "1942" }}
+            to="/games/$slug/overview"
+            params={{ slug: "the-witcher-3-wild-hunt" }}
             className={buttonVariants({ className: "mt-6" })}
           >
             Open game page

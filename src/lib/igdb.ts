@@ -16,6 +16,7 @@ export interface IgdbCompanyCredit {
 export interface IgdbSimilarGame {
   id?: number;
   name?: string;
+  slug?: string;
   rating?: number;
   cover?: IgdbImage;
 }
@@ -23,6 +24,7 @@ export interface IgdbSimilarGame {
 export interface IgdbGameResponse {
   id?: number;
   name?: string;
+  slug?: string;
   summary?: string;
   first_release_date?: number;
   rating?: number;
@@ -37,6 +39,7 @@ export interface IgdbGameResponse {
 
 export interface IgdbGamePage {
   id: number;
+  slug: string;
   name: string;
   summary: string;
   releaseDate: string;
@@ -52,6 +55,7 @@ export interface IgdbGamePage {
   publishers: string[];
   similarGames: {
     id: number;
+    slug: string;
     name: string;
     rating: number | null;
     coverUrl: string | null;
@@ -110,6 +114,7 @@ export function mapIgdbGame(game: IgdbGameResponse): IgdbGamePage {
 
   return {
     id: game.id ?? 0,
+    slug: game.slug ?? String(game.id ?? ""),
     name: game.name ?? "Untitled Game",
     summary: game.summary ?? "No summary is available for this game yet.",
     releaseDate,
@@ -125,6 +130,7 @@ export function mapIgdbGame(game: IgdbGameResponse): IgdbGamePage {
     publishers: companyNames(game.involved_companies, (credit) => credit.publisher === true),
     similarGames: (game.similar_games ?? []).map((similarGame) => ({
       id: similarGame.id ?? 0,
+      slug: similarGame.slug ?? String(similarGame.id ?? ""),
       name: similarGame.name ?? "Untitled Game",
       rating: roundedRating(similarGame.rating),
       coverUrl: imageUrl(similarGame.cover?.image_id, "cover_big_2x"),
