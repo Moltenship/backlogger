@@ -1,20 +1,32 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { Button } from "@/components/ui/button";
+import { AppShell } from "@/components/app-shell";
+import { buttonVariants } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({ component: App });
 
 function App() {
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
+    <AppShell>
+      <div className="mx-auto flex min-h-svh max-w-5xl items-center px-6 py-12">
+        <div className="max-w-2xl">
+          <p className="text-muted-foreground text-sm">Backlogger</p>
+          <h1 className="mt-2 text-4xl font-semibold tracking-tight">
+            Track games with IGDB data.
+          </h1>
+          <p className="text-muted-foreground mt-4 leading-7">
+            The first IGDB slice is ready: a server-backed game detail page with game info,
+            screenshots, similar games, and mocked friends activity.
+          </p>
+          <Link
+            to="/games/$gameId"
+            params={{ gameId: "1942" }}
+            className={buttonVariants({ className: "mt-6" })}
+          >
+            Open game page
+          </Link>
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }
