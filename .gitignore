@@ -1,0 +1,47 @@
+node_modules
+dist
+.env.local
+.vscode
+.DS_Store
+*.log
+.env.*
+*.tsbuildinfo
+
+#
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+dist-ssr
+*.local
+docs/
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+__unconfig*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI tool dot folders (keep only selected project config)
+.*
+!.agents
+# !.claude
+!.gitignore
+!.husky
+!.oxlintrc.json
+!.oxfmtrc.json
