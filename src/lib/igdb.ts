@@ -21,6 +21,11 @@ export interface IgdbSimilarGame {
   cover?: IgdbImage;
 }
 
+export interface IgdbFranchiseReference {
+  id?: number;
+  name?: string;
+}
+
 export interface IgdbGameResponse {
   id?: number;
   name?: string;
@@ -28,13 +33,40 @@ export interface IgdbGameResponse {
   summary?: string;
   first_release_date?: number;
   rating?: number;
+  rating_count?: number;
   aggregated_rating?: number;
+  aggregated_rating_count?: number;
   cover?: IgdbImage;
   screenshots?: IgdbImage[];
   genres?: IgdbNamedEntity[];
+  game_engines?: IgdbNamedEntity[];
+  game_modes?: IgdbNamedEntity[];
   platforms?: IgdbNamedEntity[];
+  player_perspectives?: IgdbNamedEntity[];
+  themes?: IgdbNamedEntity[];
+  franchise?: IgdbFranchiseReference;
+  franchises?: IgdbFranchiseReference[];
+  dlcs?: IgdbRelatedGameResponse[];
+  expanded_games?: IgdbRelatedGameResponse[];
+  expansions?: IgdbRelatedGameResponse[];
+  forks?: IgdbRelatedGameResponse[];
+  parent_game?: IgdbRelatedGameResponse;
+  ports?: IgdbRelatedGameResponse[];
+  remakes?: IgdbRelatedGameResponse[];
+  remasters?: IgdbRelatedGameResponse[];
+  standalone_expansions?: IgdbRelatedGameResponse[];
+  version_parent?: IgdbRelatedGameResponse;
   involved_companies?: IgdbCompanyCredit[];
   similar_games?: IgdbSimilarGame[];
+}
+
+export interface IgdbRelatedGameResponse {
+  id?: number;
+  name?: string;
+  slug?: string;
+  first_release_date?: number;
+  rating?: number;
+  cover?: IgdbImage;
 }
 
 export interface IgdbGamePage {
@@ -45,12 +77,18 @@ export interface IgdbGamePage {
   releaseDate: string;
   releaseYear: string;
   rating: number | null;
+  ratingCount: number | null;
   aggregatedRating: number | null;
+  aggregatedRatingCount: number | null;
   coverUrl: string | null;
   heroUrl: string | null;
   screenshots: string[];
   genres: string[];
+  gameEngines: string[];
+  gameModes: string[];
   platforms: string[];
+  playerPerspectives: string[];
+  themes: string[];
   developers: string[];
   publishers: string[];
   similarGames: {
@@ -60,6 +98,21 @@ export interface IgdbGamePage {
     rating: number | null;
     coverUrl: string | null;
   }[];
+}
+
+export interface IgdbRelatedGame {
+  id: number;
+  slug: string;
+  name: string;
+  releaseYear: string;
+  rating: number | null;
+  coverUrl: string | null;
+}
+
+export interface IgdbRelatedGameGroup {
+  key: string;
+  title: string;
+  games: IgdbRelatedGame[];
 }
 
 function compactNames(items: IgdbNamedEntity[] | undefined, preferAbbreviation = false) {
@@ -96,6 +149,10 @@ function roundedRating(value: number | undefined) {
   return typeof value === "number" ? Math.round(value) : null;
 }
 
+function normalizedCount(value: number | undefined) {
+  return typeof value === "number" ? value : null;
+}
+
 function companyNames(
   credits: IgdbCompanyCredit[] | undefined,
   predicate: (credit: IgdbCompanyCredit) => boolean,
@@ -120,12 +177,18 @@ export function mapIgdbGame(game: IgdbGameResponse): IgdbGamePage {
     releaseDate,
     releaseYear,
     rating: roundedRating(game.rating),
+    ratingCount: normalizedCount(game.rating_count),
     aggregatedRating: roundedRating(game.aggregated_rating),
+    aggregatedRatingCount: normalizedCount(game.aggregated_rating_count),
     coverUrl: imageUrl(game.cover?.image_id, "cover_big_2x"),
     heroUrl: screenshots[0] ?? null,
     screenshots,
     genres: compactNames(game.genres),
+    gameEngines: compactNames(game.game_engines),
+    gameModes: compactNames(game.game_modes),
     platforms: compactNames(game.platforms, true),
+    playerPerspectives: compactNames(game.player_perspectives),
+    themes: compactNames(game.themes),
     developers: companyNames(game.involved_companies, (credit) => credit.developer === true),
     publishers: companyNames(game.involved_companies, (credit) => credit.publisher === true),
     similarGames: (game.similar_games ?? []).map((similarGame) => ({
@@ -135,5 +198,18 @@ export function mapIgdbGame(game: IgdbGameResponse): IgdbGamePage {
       rating: roundedRating(similarGame.rating),
       coverUrl: imageUrl(similarGame.cover?.image_id, "cover_big_2x"),
     })),
+  };
+}
+
+export function mapIgdbRelatedGame(game: IgdbRelatedGameResponse): IgdbRelatedGame {
+  const { releaseYear } = dateFromUnixSeconds(game.first_release_date);
+
+  return {
+    id: game.id ?? 0,
+    slug: game.slug ?? String(game.id ?? ""),
+    name: game.name ?? "Untitled Game",
+    releaseYear,
+    rating: roundedRating(game.rating),
+    coverUrl: imageUrl(game.cover?.image_id, "cover_big_2x"),
   };
 }

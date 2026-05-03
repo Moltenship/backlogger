@@ -4,15 +4,20 @@ import {
   CalendarDays,
   Clock3,
   Gamepad2,
+  Gauge,
   Library,
   type LucideIcon,
   MessageSquareText,
+  MousePointer2,
   Star,
+  Tags,
   UsersRound,
+  Wrench,
 } from "lucide-react";
 import type { ComponentType, ReactNode, SVGProps } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { GameCardGrid } from "@/components/game-card-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { AppleDark } from "@/components/ui/svgs/appleDark";
@@ -237,31 +242,7 @@ function SimilarGames({ game }: { game: IgdbGamePage }) {
   return (
     <Panel title="Similar Games">
       {game.similarGames.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {game.similarGames.slice(0, 4).map((similarGame) => (
-            <Link
-              key={similarGame.id}
-              to="/games/$slug/overview"
-              params={{ slug: similarGame.slug }}
-              className="group"
-            >
-              <div className="bg-muted aspect-[3/4] overflow-hidden rounded-md">
-                {similarGame.coverUrl ? (
-                  <img
-                    src={similarGame.coverUrl}
-                    alt=""
-                    className="h-full w-full object-cover transition group-hover:scale-105"
-                  />
-                ) : null}
-              </div>
-              <p className="mt-2 line-clamp-2 text-sm font-medium">{similarGame.name}</p>
-              <p className="text-muted-foreground flex items-center gap-1 text-xs">
-                <Star className="size-3 fill-current" />
-                {formatScore(similarGame.rating)}
-              </p>
-            </Link>
-          ))}
-        </div>
+        <GameCardGrid games={game.similarGames.slice(0, 6)} />
       ) : (
         <EmptyState>No similar games returned yet.</EmptyState>
       )}
@@ -312,9 +293,21 @@ function InfoRows({ game }: { game: IgdbGamePage }) {
     { label: "Release Date", value: game.releaseDate, icon: CalendarDays },
     { label: "Developer", value: game.developers.join(", ") || "Unknown", icon: Gamepad2 },
     { label: "Publisher", value: game.publishers.join(", ") || "Unknown", icon: Library },
+    { label: "Engine", value: formatList(game.gameEngines), icon: Wrench },
     { label: "Platforms", value: <PlatformBadges platforms={game.platforms} />, icon: Gamepad2 },
-    { label: "IGDB Rating", value: formatScore(game.rating), icon: Star },
-    { label: "Critic Rating", value: formatScore(game.aggregatedRating), icon: Star },
+    { label: "Game Modes", value: formatList(game.gameModes), icon: Gauge },
+    { label: "Perspective", value: formatList(game.playerPerspectives), icon: MousePointer2 },
+    { label: "Themes", value: formatList(game.themes), icon: Tags },
+    {
+      label: "IGDB Rating",
+      value: formatScoreWithCount(game.rating, game.ratingCount),
+      icon: Star,
+    },
+    {
+      label: "Critic Rating",
+      value: formatScoreWithCount(game.aggregatedRating, game.aggregatedRatingCount),
+      icon: Star,
+    },
     { label: "Est. Progress", value: "Mocked friends activity", icon: Clock3 },
   ];
 
@@ -329,6 +322,10 @@ function InfoRows({ game }: { game: IgdbGamePage }) {
       ))}
     </dl>
   );
+}
+
+function formatList(items: string[]) {
+  return items.join(", ") || "Unknown";
 }
 
 function PlatformBadges({ platforms }: { platforms: string[] }) {
@@ -440,6 +437,10 @@ function GameError({ error }: { error: string | null }) {
   );
 }
 
-function formatScore(score: number | null) {
-  return score === null ? "N/A" : String(score);
+function formatScoreWithCount(score: number | null, count: number | null) {
+  if (score === null) {
+    return "N/A";
+  }
+
+  return count === null ? String(score) : `${score} (${count.toLocaleString()} ratings)`;
 }
