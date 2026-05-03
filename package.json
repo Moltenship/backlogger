@@ -3,9 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
-    "dev:all": "concurrently -n app,convex -c cyan,magenta \"bun run dev\" \"bun run dev:convex\"",
-    "dev:convex": "convex dev",
+    "dev": "concurrently -n app,convex -c cyan,magenta \"vite dev\" \"convex dev\"",
     "build": "tsgo -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
