@@ -1,3 +1,4 @@
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CalendarDays,
@@ -14,10 +15,11 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { IgdbGamePage } from "@/lib/igdb";
-import { getIgdbGame } from "@/lib/igdb-server";
+import { gameQueryOptions } from "@/lib/igdb-query";
 
 export const Route = createFileRoute("/games/$gameId")({
-  loader: ({ params }) => getIgdbGame({ data: { gameId: params.gameId } }),
+  loader: ({ context, params }) =>
+    context.queryClient.ensureQueryData(gameQueryOptions(params.gameId)),
   component: GamePage,
 });
 
@@ -29,7 +31,8 @@ const friendsActivity = [
 ];
 
 function GamePage() {
-  const { game, error } = Route.useLoaderData();
+  const { gameId } = Route.useParams();
+  const { data } = useSuspenseQuery(gameQueryOptions(gameId));
 
   return (
     <AppShell>
@@ -50,7 +53,7 @@ function GamePage() {
           </Link>
         </div>
 
-        {game ? <GameDetail game={game} /> : <GameError error={error} />}
+        {data.game ? <GameDetail game={data.game} /> : <GameError error={data.error} />}
       </div>
     </AppShell>
   );

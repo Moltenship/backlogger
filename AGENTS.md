@@ -16,7 +16,7 @@ Convex agent skills for common tasks can be installed by running
 
 ## Task Completion Requirements
 
-- All of `bun run format:check`, `bun run lint`, and `bun run typecheck:tsgo` must pass before considering tasks completed.
+- `bun run check` and `bun run test` must pass before considering tasks completed. Never use `bun test` use `bun run test` instead
 
 ## Commit message style
 
