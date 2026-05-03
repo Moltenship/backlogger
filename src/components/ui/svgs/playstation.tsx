@@ -1,8 +1,11 @@
 import type { SVGProps } from "react";
 
+import { cn } from "@/lib/utils";
+
 const Playstation = (props: SVGProps<SVGSVGElement>) => (
   <svg
     {...props}
+    className={cn("dark:invert", props.className)}
     version="1.1"
     id="Layer_1"
     xmlnsXlink="http://www.w3.org/1999/xlink"
