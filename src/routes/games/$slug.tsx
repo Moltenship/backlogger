@@ -1,5 +1,6 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useMutation, useQuery } from "convex/react";
 import {
   CalendarDays,
   Clock3,
@@ -7,19 +8,19 @@ import {
   Gauge,
   Library,
   type LucideIcon,
-  MessageSquareText,
   MousePointer2,
   Star,
   Tags,
   UsersRound,
   Wrench,
 } from "lucide-react";
-import type { ComponentType, ReactNode, SVGProps } from "react";
+import { useState, type ComponentType, type ReactNode, type SVGProps } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { GameCardGrid } from "@/components/game-card-grid";
+import { GameEntryForm, type GameEntryFormValue } from "@/components/game-entry-form";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { AppleDark } from "@/components/ui/svgs/appleDark";
 import { EpicgamesIconDark } from "@/components/ui/svgs/epicgamesIconDark";
 import { Google } from "@/components/ui/svgs/google";
@@ -29,8 +30,11 @@ import { Steam } from "@/components/ui/svgs/steam";
 import { Windows } from "@/components/ui/svgs/windows";
 import { Xbox } from "@/components/ui/svgs/xbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { authClient } from "@/lib/auth-client";
 import type { IgdbGamePage } from "@/lib/igdb";
 import { gameQueryOptions } from "@/lib/igdb-query";
+
+import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/games/$slug")({
   loader: ({ context, params }) =>
@@ -80,11 +84,60 @@ function GamePage() {
 function GameDetail({ game }: { game: IgdbGamePage }) {
   const activeTab = useActiveGameTab();
   const navigate = useNavigate();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const viewerEntry = useQuery(api.gameEntries.viewerEntry, { igdbId: game.id });
+  const upsertGameEntry = useMutation(api.gameEntries.upsert);
+  const [isSavingEntry, setIsSavingEntry] = useState(false);
+  const isEntryLoading = viewerEntry === undefined;
+  const isEntryFormLoading = isSessionPending || isEntryLoading;
+  const isAuthenticated = Boolean(session?.user);
+  const initialEntryValue: GameEntryFormValue | null = viewerEntry
+    ? {
+        status: viewerEntry.status,
+        rating: viewerEntry.rating,
+        review: viewerEntry.review,
+      }
+    : null;
   const heroStyle = game.heroUrl
     ? {
         backgroundImage: `linear-gradient(90deg, rgb(0 0 0 / 0.92), rgb(0 0 0 / 0.62), rgb(0 0 0 / 0.88)), url(${game.heroUrl})`,
       }
     : undefined;
+
+  async function signInWithTwitch() {
+    setSaveError(null);
+
+    try {
+      await authClient.signIn.social({ provider: "twitch" });
+    } catch (error) {
+      setSaveError(`Could not start Twitch sign in. ${getErrorMessage(error)}`);
+    }
+  }
+
+  async function saveEntry(value: GameEntryFormValue) {
+    setIsSavingEntry(true);
+    setSaveError(null);
+
+    try {
+      await upsertGameEntry({
+        game: {
+          igdbId: game.id,
+          slug: game.slug,
+          name: game.name,
+          coverUrl: game.coverUrl,
+          releaseYear: game.releaseYear,
+        },
+        status: value.status,
+        rating: value.rating,
+        review: value.review,
+      });
+    } catch (error) {
+      setSaveError(`Could not save your library entry. ${getErrorMessage(error)}`);
+    } finally {
+      setIsSavingEntry(false);
+    }
+  }
 
   return (
     <section className="min-w-0 space-y-4">
@@ -113,20 +166,22 @@ function GameDetail({ game }: { game: IgdbGamePage }) {
               {game.summary}
             </p>
 
-            <div className="mt-6 flex flex-wrap gap-2">
-              <Button>
-                <Gamepad2 className="size-4" />
-                Log Game
-              </Button>
-              <Button variant="outline">
-                <MessageSquareText className="size-4" />
-                Write Review
-              </Button>
-              <Button variant="outline">
-                <Library className="size-4" />
-                Add to Backlog
-              </Button>
-            </div>
+            {isEntryFormLoading ? (
+              <GameEntryFormLoading />
+            ) : (
+              <GameEntryForm
+                initialValue={initialEntryValue}
+                isAuthenticated={isAuthenticated}
+                isSaving={isSavingEntry}
+                onSignIn={signInWithTwitch}
+                onSubmit={saveEntry}
+              />
+            )}
+            {saveError ? (
+              <p className="text-destructive mt-2 text-sm" role="alert">
+                {saveError}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
@@ -181,6 +236,31 @@ function useActiveGameTab(): GameTab {
   }
 
   return "overview";
+}
+
+function GameEntryFormLoading() {
+  return (
+    <div
+      className="bg-background/70 border-border/70 mt-6 max-w-2xl rounded-lg border p-3 backdrop-blur"
+      aria-label="Loading library entry"
+    >
+      <div className="grid gap-3 md:grid-cols-[10rem_1fr_auto]">
+        <div className="grid gap-1">
+          <div className="bg-muted h-4 w-14 animate-pulse rounded" />
+          <div className="bg-muted h-9 rounded-md" />
+        </div>
+        <div className="grid gap-1">
+          <div className="bg-muted h-4 w-14 animate-pulse rounded" />
+          <div className="bg-muted h-9 rounded-md" />
+        </div>
+        <div className="bg-muted h-9 w-20 self-end rounded-md" />
+      </div>
+      <div className="mt-3 grid gap-1">
+        <div className="bg-muted h-4 w-14 animate-pulse rounded" />
+        <div className="bg-muted h-24 rounded-md" />
+      </div>
+    </div>
+  );
 }
 
 export function OverviewTab({ game }: { game: IgdbGamePage }) {
@@ -443,4 +523,8 @@ function formatScoreWithCount(score: number | null, count: number | null) {
   }
 
   return count === null ? String(score) : `${score} (${count.toLocaleString()} ratings)`;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Please try again.";
 }
