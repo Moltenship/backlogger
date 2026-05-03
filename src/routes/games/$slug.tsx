@@ -1,25 +1,42 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   CalendarDays,
+  ChevronDown,
   Clock3,
   Gamepad2,
   Gauge,
   Library,
   type LucideIcon,
-  MessageSquareText,
   MousePointer2,
   Star,
   Tags,
   UsersRound,
   Wrench,
 } from "lucide-react";
-import type { ComponentType, ReactNode, SVGProps } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { GameCardGrid } from "@/components/game-card-grid";
+import { GameEntryForm, type GameEntryFormValue } from "@/components/game-entry-form";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AppleDark } from "@/components/ui/svgs/appleDark";
 import { EpicgamesIconDark } from "@/components/ui/svgs/epicgamesIconDark";
 import { Google } from "@/components/ui/svgs/google";
@@ -29,8 +46,17 @@ import { Steam } from "@/components/ui/svgs/steam";
 import { Windows } from "@/components/ui/svgs/windows";
 import { Xbox } from "@/components/ui/svgs/xbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { authClient } from "@/lib/auth-client";
+import {
+  GAME_ENTRY_STATUS_LABELS,
+  GAME_ENTRY_STATUSES,
+  type GameEntryStatus,
+  isGameEntryStatus,
+} from "@/lib/game-entry";
 import type { IgdbGamePage } from "@/lib/igdb";
 import { gameQueryOptions } from "@/lib/igdb-query";
+
+import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/games/$slug")({
   loader: ({ context, params }) =>
@@ -44,6 +70,10 @@ const friendsActivity = [
   { name: "Nia", action: "reviewed", value: "Thoughtful pacing", time: "1d ago" },
   { name: "Rei", action: "added to backlog", value: "Next weekend", time: "2d ago" },
 ];
+
+const statusMenuTriggerButton = (
+  <Button aria-label="Choose game status" className="rounded-l-none px-2" size="default" />
+);
 
 type PlatformIcon = LucideIcon | ComponentType<SVGProps<SVGSVGElement>>;
 type GameTab = "overview" | "related" | "community";
@@ -80,11 +110,89 @@ function GamePage() {
 function GameDetail({ game }: { game: IgdbGamePage }) {
   const activeTab = useActiveGameTab();
   const navigate = useNavigate();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
+  const convexAuth = useConvexAuth();
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isEntryDialogOpen, setIsEntryDialogOpen] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<GameEntryStatus>("backlog");
+  const viewerEntry = useQuery(api.gameEntries.viewerEntry, { igdbId: game.id });
+  const upsertGameEntry = useMutation(api.gameEntries.upsert);
+  const [isSavingEntry, setIsSavingEntry] = useState(false);
+  const isEntryLoading = viewerEntry === undefined;
+  const isEntryFormLoading = isSessionPending || convexAuth.isLoading || isEntryLoading;
+  const isAuthenticated = Boolean(session?.user) && convexAuth.isAuthenticated;
+  const currentStatus = viewerEntry?.status ?? draftStatus;
+  const entryDialogValue: GameEntryFormValue = {
+    status: draftStatus,
+    rating: viewerEntry?.rating ?? null,
+    review: viewerEntry?.review ?? null,
+  };
   const heroStyle = game.heroUrl
     ? {
         backgroundImage: `linear-gradient(90deg, rgb(0 0 0 / 0.92), rgb(0 0 0 / 0.62), rgb(0 0 0 / 0.88)), url(${game.heroUrl})`,
       }
     : undefined;
+
+  useEffect(() => {
+    if (viewerEntry) {
+      setDraftStatus(viewerEntry.status);
+    }
+  }, [viewerEntry]);
+
+  function openEntryDialog(status: GameEntryStatus) {
+    setSaveError(null);
+    setDraftStatus(status);
+    setIsEntryDialogOpen(true);
+  }
+
+  async function signInWithTwitch() {
+    setSaveError(null);
+
+    try {
+      await authClient.signIn.social({ provider: "twitch" });
+    } catch (error) {
+      setSaveError(`Could not start Twitch sign in. ${getErrorMessage(error)}`);
+    }
+  }
+
+  async function saveEntry(value: GameEntryFormValue) {
+    if (!isAuthenticated) {
+      setIsEntryDialogOpen(false);
+      setSaveError(
+        session?.user
+          ? "Your login session is active, but the game library is not authenticated yet. Refresh the page or sign in again."
+          : "Sign in with Twitch before saving games to your library.",
+      );
+      return;
+    }
+
+    setIsSavingEntry(true);
+    setSaveError(null);
+
+    try {
+      await upsertGameEntry({
+        game: {
+          igdbId: game.id,
+          slug: game.slug,
+          name: game.name,
+          coverUrl: game.coverUrl,
+          releaseYear: game.releaseYear,
+        },
+        status: value.status,
+        rating: value.rating,
+        review: value.review,
+      });
+      setIsEntryDialogOpen(false);
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        setIsEntryDialogOpen(false);
+      }
+
+      setSaveError(getSaveErrorMessage(error));
+    } finally {
+      setIsSavingEntry(false);
+    }
+  }
 
   return (
     <section className="min-w-0 space-y-4">
@@ -113,20 +221,43 @@ function GameDetail({ game }: { game: IgdbGamePage }) {
               {game.summary}
             </p>
 
-            <div className="mt-6 flex flex-wrap gap-2">
-              <Button>
-                <Gamepad2 className="size-4" />
-                Log Game
-              </Button>
-              <Button variant="outline">
-                <MessageSquareText className="size-4" />
-                Write Review
-              </Button>
-              <Button variant="outline">
-                <Library className="size-4" />
-                Add to Backlog
-              </Button>
-            </div>
+            {isEntryFormLoading ? (
+              <GameEntryActionLoading />
+            ) : (
+              <div className="mt-6">
+                <GameEntryStatusButton
+                  status={currentStatus}
+                  onOpen={() => {
+                    openEntryDialog(currentStatus);
+                  }}
+                  onStatusSelect={(status) => {
+                    openEntryDialog(status);
+                  }}
+                />
+              </div>
+            )}
+            {saveError ? (
+              <p className="text-destructive mt-2 text-sm" role="alert">
+                {saveError}
+              </p>
+            ) : null}
+            <Dialog open={isEntryDialogOpen} onOpenChange={setIsEntryDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{GAME_ENTRY_STATUS_LABELS[draftStatus]}</DialogTitle>
+                  <DialogDescription>
+                    Set your status, optional rating, and optional review for {game.name}.
+                  </DialogDescription>
+                </DialogHeader>
+                <GameEntryForm
+                  initialValue={entryDialogValue}
+                  isAuthenticated={isAuthenticated}
+                  isSaving={isSavingEntry}
+                  onSignIn={signInWithTwitch}
+                  onSubmit={saveEntry}
+                />
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </div>
@@ -152,6 +283,48 @@ function GameDetail({ game }: { game: IgdbGamePage }) {
         <Outlet />
       </Tabs>
     </section>
+  );
+}
+
+function GameEntryStatusButton({
+  onOpen,
+  onStatusSelect,
+  status,
+}: {
+  onOpen: () => void;
+  onStatusSelect: (status: GameEntryStatus) => void;
+  status: GameEntryStatus;
+}) {
+  return (
+    <div className="inline-flex rounded-lg shadow-sm">
+      <Button className="border-r-primary-foreground/20 rounded-r-none" onClick={onOpen}>
+        <Gamepad2 data-icon="inline-start" />
+        {GAME_ENTRY_STATUS_LABELS[status]}
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger render={statusMenuTriggerButton}>
+          <ChevronDown data-icon="inline-end" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="min-w-44" align="start">
+          <DropdownMenuGroup>
+            <DropdownMenuRadioGroup
+              value={status}
+              onValueChange={(value) => {
+                if (isGameEntryStatus(value)) {
+                  onStatusSelect(value);
+                }
+              }}
+            >
+              {GAME_ENTRY_STATUSES.map((item) => (
+                <DropdownMenuRadioItem key={item} value={item}>
+                  {GAME_ENTRY_STATUS_LABELS[item]}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 
@@ -181,6 +354,18 @@ function useActiveGameTab(): GameTab {
   }
 
   return "overview";
+}
+
+function GameEntryActionLoading() {
+  return (
+    <div
+      className="bg-background/70 border-border/70 mt-6 inline-flex rounded-lg border p-1 backdrop-blur"
+      aria-label="Loading library entry"
+    >
+      <div className="bg-muted h-8 w-28 animate-pulse rounded-md" />
+      <div className="bg-muted ml-1 h-8 w-9 animate-pulse rounded-md" />
+    </div>
+  );
 }
 
 export function OverviewTab({ game }: { game: IgdbGamePage }) {
@@ -443,4 +628,20 @@ function formatScoreWithCount(score: number | null, count: number | null) {
   }
 
   return count === null ? String(score) : `${score} (${count.toLocaleString()} ratings)`;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Please try again.";
+}
+
+function getSaveErrorMessage(error: unknown) {
+  if (isAuthRequiredError(error)) {
+    return "Could not save your library entry because the game library is not authenticated. Refresh the page or sign in with Twitch again.";
+  }
+
+  return `Could not save your library entry. ${getErrorMessage(error)}`;
+}
+
+function isAuthRequiredError(error: unknown) {
+  return getErrorMessage(error).includes("Authentication is required");
 }
