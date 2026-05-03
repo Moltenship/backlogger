@@ -63,7 +63,7 @@ export function GameEntryForm({
         });
       }}
     >
-      <div className="grid gap-3 md:grid-cols-[10rem_1fr_auto]">
+      <div className="grid gap-3 md:grid-cols-[10rem_1fr]">
         <label className="grid gap-1 text-sm">
           <span className="text-muted-foreground">Status</span>
           <select
@@ -103,7 +103,7 @@ export function GameEntryForm({
                   >
                     <Star className="size-4 fill-current" />
                   </span>
-                  <label className="focus-within:ring-ring/50 absolute inset-y-0 left-0 w-1/2 cursor-pointer rounded-l-sm focus-within:ring-3">
+                  <label className="absolute inset-y-0 left-0 w-1/2 cursor-pointer rounded-l-sm">
                     <input
                       type="radio"
                       name="rating"
@@ -118,7 +118,7 @@ export function GameEntryForm({
                     />
                     <span className="sr-only">{formatRatingLabel(value - 0.5)}</span>
                   </label>
-                  <label className="focus-within:ring-ring/50 absolute inset-y-0 right-0 w-1/2 cursor-pointer rounded-r-sm focus-within:ring-3">
+                  <label className="absolute inset-y-0 right-0 w-1/2 cursor-pointer rounded-r-sm">
                     <input
                       type="radio"
                       name="rating"
@@ -136,22 +136,8 @@ export function GameEntryForm({
                 </span>
               ))}
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setRating(null);
-              }}
-            >
-              Clear
-            </Button>
           </div>
         </div>
-
-        <Button type="submit" className="self-end" disabled={isSaving}>
-          {isAuthenticated ? "Save" : "Sign in"}
-        </Button>
       </div>
 
       <label htmlFor={reviewId} className="mt-3 grid gap-1 text-sm">
@@ -169,6 +155,12 @@ export function GameEntryForm({
           placeholder="Optional notes or review"
         />
       </label>
+
+      <div className="mt-3 flex justify-end">
+        <Button type="submit" disabled={isSaving}>
+          {isAuthenticated ? "Save" : "Sign in"}
+        </Button>
+      </div>
     </form>
   );
 }

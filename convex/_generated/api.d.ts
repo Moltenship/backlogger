@@ -8,7 +8,9 @@
  * @module
  */
 
+import type * as auth from "../auth.js";
 import type * as gameEntries from "../gameEntries.js";
+import type * as http from "../http.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +19,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  auth: typeof auth;
   gameEntries: typeof gameEntries;
+  http: typeof http;
 }>;
 
 /**
@@ -46,4 +50,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
+};

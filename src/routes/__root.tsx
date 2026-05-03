@@ -1,13 +1,28 @@
+import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
+import type { ConvexQueryClient } from "@convex-dev/react-query";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import type { QueryClient } from "@tanstack/react-query";
-import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRouteWithContext,
+  useRouteContext,
+} from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
+import { createServerFn } from "@tanstack/react-start";
 
-import { Providers } from "@/lib/providers";
+import { authClient } from "@/lib/auth-client";
+import { getToken } from "@/lib/auth-server";
 
 import appCss from "../styles.css?url";
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+const getAuth = createServerFn({ method: "GET" }).handler(async () => await getToken());
+
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient;
+  convexQueryClient: ConvexQueryClient;
+}>()({
   head: () => ({
     meta: [
       {
@@ -34,8 +49,36 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       <p>The requested page could not be found.</p>
     </main>
   ),
-  shellComponent: RootDocument,
+  beforeLoad: async (ctx) => {
+    const token = await getAuth();
+
+    if (token) {
+      ctx.context.convexQueryClient.serverHttpClient?.setAuth(token);
+    }
+
+    return {
+      isAuthenticated: Boolean(token),
+      token,
+    };
+  },
+  component: RootComponent,
 });
+
+function RootComponent() {
+  const context = useRouteContext({ from: Route.id });
+
+  return (
+    <ConvexBetterAuthProvider
+      client={context.convexQueryClient.convexClient}
+      authClient={authClient}
+      initialToken={context.token}
+    >
+      <RootDocument>
+        <Outlet />
+      </RootDocument>
+    </ConvexBetterAuthProvider>
+  );
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
@@ -44,7 +87,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        {children}
         <TanStackDevtools
           config={{
             position: "bottom-right",
