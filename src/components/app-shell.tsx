@@ -1,28 +1,31 @@
+import { convexQuery } from "@convex-dev/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Gamepad2, Home, LogOut, PanelLeftClose, PanelLeftOpen, UserRound } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
+import { api } from "../../convex/_generated/api";
+
 const SIDEBAR_STORAGE_KEY = "backlogger:sidebar-collapsed";
+export const SIDEBAR_COOKIE_NAME = "backlogger-sidebar-collapsed";
+const SIDEBAR_PERSIST_MAX_AGE = 60 * 60 * 24 * 365;
 
-export function AppShell({ children }: { children: ReactNode }) {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-
-    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
-  });
+export function AppShell({
+  children,
+  initialSidebarCollapsed = false,
+}: {
+  children: ReactNode;
+  initialSidebarCollapsed?: boolean;
+}) {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] =
+    usePersistentSidebarState(initialSidebarCollapsed);
 
   function toggleSidebar() {
-    setIsSidebarCollapsed((value) => {
-      const nextValue = !value;
-      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(nextValue));
-      return nextValue;
-    });
+    setIsSidebarCollapsed((value) => !value);
   }
 
   useEffect(() => {
@@ -126,10 +129,47 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
+function usePersistentSidebarState(
+  initialValue: boolean,
+): [boolean, Dispatch<SetStateAction<boolean>>] {
+  const [value, setValue] = useState(initialValue);
+
+  useEffect(() => {
+    const storedValue = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+
+    if (storedValue === null) {
+      return;
+    }
+
+    const nextValue = storedValue === "true";
+
+    if (nextValue !== initialValue) {
+      setValue(nextValue);
+      persistSidebarState(nextValue);
+    }
+  }, [initialValue]);
+
+  function setPersistentValue(action: SetStateAction<boolean>) {
+    setValue((currentValue) => {
+      const nextValue = typeof action === "function" ? action(currentValue) : action;
+      persistSidebarState(nextValue);
+      return nextValue;
+    });
+  }
+
+  return [value, setPersistentValue];
+}
+
+function persistSidebarState(value: boolean) {
+  window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(value));
+  document.cookie = `${SIDEBAR_COOKIE_NAME}=${String(value)}; path=/; max-age=${SIDEBAR_PERSIST_MAX_AGE}; SameSite=Lax`;
+}
+
 function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
-  const { data: session, isPending } = authClient.useSession();
+  const { data: currentUser } = useSuspenseQuery(convexQuery(api.auth.getCurrentUser, {}));
+  const { data: session } = authClient.useSession();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const user = session?.user;
+  const user = session?.user ?? currentUser;
   const initials = getInitials(user?.name ?? user?.email ?? "Player");
 
   async function signInWithTwitch() {
@@ -148,29 +188,16 @@ function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
     setIsSubmitting(true);
 
     try {
-      await authClient.signOut();
+      await authClient.signOut({
+        fetchOptions: {
+          onSuccess: () => {
+            location.reload();
+          },
+        },
+      });
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  if (isPending) {
-    return (
-      <div
-        className={cn(
-          "border-border/70 mt-auto rounded-lg border p-4",
-          isCollapsed && "grid w-10 place-items-center border-0 p-0",
-        )}
-      >
-        <div className="bg-muted size-10 animate-pulse rounded-full" />
-        <div
-          className={cn("bg-muted mt-4 h-3 w-24 animate-pulse rounded", isCollapsed && "sr-only")}
-        />
-        <div
-          className={cn("bg-muted mt-2 h-3 w-32 animate-pulse rounded", isCollapsed && "sr-only")}
-        />
-      </div>
-    );
   }
 
   if (!user) {

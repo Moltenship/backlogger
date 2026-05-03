@@ -1,5 +1,5 @@
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
-import type { ConvexQueryClient } from "@convex-dev/react-query";
+import { convexQuery, type ConvexQueryClient } from "@convex-dev/react-query";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import type { QueryClient } from "@tanstack/react-query";
 import {
@@ -11,13 +11,20 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
+import { getCookie } from "@tanstack/react-start/server";
 
+import { SIDEBAR_COOKIE_NAME } from "@/components/app-shell";
 import { authClient } from "@/lib/auth-client";
 import { getToken } from "@/lib/auth-server";
+
+import { api } from "../../convex/_generated/api";
 
 import appCss from "../styles.css?url";
 
 const getAuth = createServerFn({ method: "GET" }).handler(async () => await getToken());
+const getUiPreferences = createServerFn({ method: "GET" }).handler(() => ({
+  isSidebarCollapsed: getCookie(SIDEBAR_COOKIE_NAME) === "true",
+}));
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -50,14 +57,17 @@ export const Route = createRootRouteWithContext<{
     </main>
   ),
   beforeLoad: async (ctx) => {
-    const token = await getAuth();
+    const [token, uiPreferences] = await Promise.all([getAuth(), getUiPreferences()]);
 
     if (token) {
       ctx.context.convexQueryClient.serverHttpClient?.setAuth(token);
     }
 
+    await ctx.context.queryClient.ensureQueryData(convexQuery(api.auth.getCurrentUser, {}));
+
     return {
       isAuthenticated: Boolean(token),
+      isSidebarCollapsed: uiPreferences.isSidebarCollapsed,
       token,
     };
   },

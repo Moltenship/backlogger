@@ -1,6 +1,14 @@
+import { convexQuery } from "@convex-dev/react-query";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  useNavigate,
+  useRouteContext,
+  useRouterState,
+} from "@tanstack/react-router";
+import { useConvexAuth, useMutation } from "convex/react";
 import {
   CalendarDays,
   ChevronDown,
@@ -57,10 +65,20 @@ import type { IgdbGamePage } from "@/lib/igdb";
 import { gameQueryOptions } from "@/lib/igdb-query";
 
 import { api } from "../../../convex/_generated/api";
+import { Route as RootRoute } from "../__root";
 
 export const Route = createFileRoute("/games/$slug")({
-  loader: ({ context, params }) =>
-    context.queryClient.ensureQueryData(gameQueryOptions(params.slug)),
+  loader: async ({ context, params }) => {
+    const data = await context.queryClient.ensureQueryData(gameQueryOptions(params.slug));
+
+    if (data.game) {
+      await context.queryClient.ensureQueryData(
+        convexQuery(api.gameEntries.viewerEntry, { igdbId: data.game.id }),
+      );
+    }
+
+    return data;
+  },
   component: GamePage,
 });
 
@@ -81,9 +99,10 @@ type GameTab = "overview" | "related" | "community";
 function GamePage() {
   const { slug } = Route.useParams();
   const { data } = useSuspenseQuery(gameQueryOptions(slug));
+  const { isSidebarCollapsed } = useRouteContext({ from: RootRoute.id });
 
   return (
-    <AppShell>
+    <AppShell initialSidebarCollapsed={isSidebarCollapsed}>
       <div className="mx-auto max-w-[100rem] px-4 py-4 sm:px-6 lg:px-8">
         <div className="mb-4 flex items-center justify-between gap-3 lg:hidden">
           <Link to="/" className="flex items-center gap-2 font-semibold">
@@ -110,16 +129,17 @@ function GamePage() {
 function GameDetail({ game }: { game: IgdbGamePage }) {
   const activeTab = useActiveGameTab();
   const navigate = useNavigate();
-  const { data: session, isPending: isSessionPending } = authClient.useSession();
+  const { data: session } = authClient.useSession();
   const convexAuth = useConvexAuth();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isEntryDialogOpen, setIsEntryDialogOpen] = useState(false);
   const [draftStatus, setDraftStatus] = useState<GameEntryStatus>("backlog");
-  const viewerEntry = useQuery(api.gameEntries.viewerEntry, { igdbId: game.id });
+  const { data: viewerEntry, isPending: isEntryLoading } = useSuspenseQuery(
+    convexQuery(api.gameEntries.viewerEntry, { igdbId: game.id }),
+  );
   const upsertGameEntry = useMutation(api.gameEntries.upsert);
   const [isSavingEntry, setIsSavingEntry] = useState(false);
-  const isEntryLoading = viewerEntry === undefined;
-  const isEntryFormLoading = isSessionPending || convexAuth.isLoading || isEntryLoading;
+  const isEntryFormLoading = isEntryLoading;
   const isAuthenticated = Boolean(session?.user) && convexAuth.isAuthenticated;
   const currentStatus = viewerEntry?.status ?? draftStatus;
   const entryDialogValue: GameEntryFormValue = {

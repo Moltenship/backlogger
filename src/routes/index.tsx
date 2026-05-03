@@ -1,13 +1,16 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
 
 import { AppShell } from "@/components/app-shell";
 import { buttonVariants } from "@/components/ui/button";
+import { Route as RootRoute } from "@/routes/__root";
 
 export const Route = createFileRoute("/")({ component: App });
 
 function App() {
+  const { isSidebarCollapsed } = useRouteContext({ from: RootRoute.id });
+
   return (
-    <AppShell>
+    <AppShell initialSidebarCollapsed={isSidebarCollapsed}>
       <div className="mx-auto flex min-h-svh max-w-5xl items-center px-6 py-12">
         <div className="max-w-2xl">
           <p className="text-muted-foreground text-sm">Backlogger</p>

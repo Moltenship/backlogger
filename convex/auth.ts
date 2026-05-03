@@ -4,7 +4,7 @@ import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
 
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
-import { internalAction } from "./_generated/server";
+import { internalAction, query } from "./_generated/server";
 import authConfig from "./auth.config";
 
 const siteUrl = process.env.SITE_URL;
@@ -33,6 +33,11 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
 export const createAuth = (ctx: GenericCtx<DataModel>) => betterAuth(createAuthOptions(ctx));
 
 export const { getAuthUser } = authComponent.clientApi();
+
+export const getCurrentUser = query({
+  args: {},
+  handler: async (ctx) => await authComponent.safeGetAuthUser(ctx),
+});
 
 export const rotateKeys = internalAction({
   args: {},

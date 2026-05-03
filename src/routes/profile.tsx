@@ -1,5 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { convexQuery } from "@convex-dev/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
 import { Star, UserRound } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -12,21 +13,24 @@ import {
   type GameEntryProfile,
   type GameEntryStatus,
 } from "@/lib/game-entry";
+import { Route as RootRoute } from "@/routes/__root";
 
 import { api } from "../../convex/_generated/api";
 
 const PROFILE_SHELF_STATUSES = ["playing", "backlog", "completed", "dropped"] as const;
 
 export const Route = createFileRoute("/profile")({
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(convexQuery(api.gameEntries.listViewerProfile, {}));
+  },
   component: ProfilePage,
 });
 
 function ProfilePage() {
-  const { data: session, isPending: isSessionPending } = authClient.useSession();
-  const profile = useQuery(api.gameEntries.listViewerProfile);
-  const user = session?.user;
+  const { isSidebarCollapsed } = useRouteContext({ from: RootRoute.id });
+  const { data: user } = useSuspenseQuery(convexQuery(api.auth.getCurrentUser, {}));
+  const { data: profile } = useSuspenseQuery(convexQuery(api.gameEntries.listViewerProfile, {}));
   const isSignedIn = Boolean(user);
-  const isProfileLoading = isSignedIn && profile === undefined;
   const initials = getInitials(user?.name ?? user?.email ?? "User");
 
   async function signInWithTwitch() {
@@ -34,7 +38,7 @@ function ProfilePage() {
   }
 
   return (
-    <AppShell>
+    <AppShell initialSidebarCollapsed={isSidebarCollapsed}>
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         <section className="border-border/70 bg-card rounded-lg border p-5 shadow-sm">
           <div className="flex flex-wrap items-center gap-4">
@@ -42,14 +46,14 @@ function ProfilePage() {
               <img src={user.image} alt="" className="size-14 rounded-full object-cover" />
             ) : (
               <div className="bg-primary text-primary-foreground grid size-14 place-items-center rounded-full text-lg font-semibold">
-                {isSessionPending ? <UserRound className="size-5" /> : initials}
+                {isSignedIn ? initials : <UserRound className="size-5" />}
               </div>
             )}
 
             <div className="min-w-0">
               <p className="text-muted-foreground text-sm">Profile</p>
               <h1 className="truncate text-2xl font-semibold tracking-tight">
-                {isSessionPending ? "Loading profile" : (user?.name ?? "Signed out")}
+                {user?.name ?? "Signed out"}
               </h1>
               {user?.email ? (
                 <p className="text-muted-foreground mt-1 truncate text-sm">{user.email}</p>
@@ -70,15 +74,13 @@ function ProfilePage() {
             </div>
           ) : null}
 
-          {!isSessionPending && !isSignedIn ? (
+          {!isSignedIn ? (
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Button onClick={signInWithTwitch}>Sign in with Twitch</Button>
               <p className="text-muted-foreground text-sm">Sign in to build your game library.</p>
             </div>
           ) : null}
         </section>
-
-        {isProfileLoading || isSessionPending ? <ProfileLoading /> : null}
 
         {profile ? (
           <div className="mt-5 space-y-5">
@@ -162,23 +164,6 @@ function ProfileGameCard({ game }: { game: GameEntryProfile["shelves"][GameEntry
         </span>
       </div>
     </Link>
-  );
-}
-
-function ProfileLoading() {
-  return (
-    <div className="mt-5 space-y-5">
-      <div className="text-muted-foreground text-sm">Loading game library...</div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {Array.from({ length: 6 }, (_, index) => (
-          <div key={index}>
-            <div className="bg-muted aspect-[3/4] animate-pulse rounded-md" />
-            <div className="bg-muted mt-2 h-4 w-4/5 animate-pulse rounded" />
-            <div className="bg-muted mt-2 h-3 w-1/2 animate-pulse rounded" />
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 
