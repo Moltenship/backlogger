@@ -31,7 +31,7 @@ function ProfilePage() {
   const { data: user } = useSuspenseQuery(convexQuery(api.auth.getCurrentUser, {}));
   const { data: profile } = useSuspenseQuery(convexQuery(api.gameEntries.listViewerProfile, {}));
   const isSignedIn = Boolean(user);
-  const initials = getInitials(user?.name ?? user?.email ?? "User");
+  const initials = getInitials(user?.name ?? "User");
 
   async function signInWithTwitch() {
     await authClient.signIn.social({ provider: "twitch" });
@@ -55,8 +55,8 @@ function ProfilePage() {
               <h1 className="truncate text-2xl font-semibold tracking-tight">
                 {user?.name ?? "Signed out"}
               </h1>
-              {user?.email ? (
-                <p className="text-muted-foreground mt-1 truncate text-sm">{user.email}</p>
+              {isSignedIn ? (
+                <p className="text-muted-foreground mt-1 truncate text-sm">Twitch account</p>
               ) : null}
             </div>
           </div>

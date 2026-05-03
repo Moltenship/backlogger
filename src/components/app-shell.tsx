@@ -170,7 +170,7 @@ function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
   const { data: session } = authClient.useSession();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const user = session?.user ?? currentUser;
-  const initials = getInitials(user?.name ?? user?.email ?? "Player");
+  const initials = getInitials(user?.name ?? "Player");
 
   async function signInWithTwitch() {
     setIsSubmitting(true);
@@ -265,7 +265,7 @@ function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
         )}
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{user.name ?? "Player"}</p>
-          <p className="text-muted-foreground truncate text-xs">{user.email ?? "Twitch account"}</p>
+          <p className="text-muted-foreground truncate text-xs">Twitch account</p>
         </div>
       </div>
       <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
