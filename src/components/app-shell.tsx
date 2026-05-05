@@ -1,19 +1,20 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { useMutation } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useRouteContext } from "@tanstack/react-router";
+import { useConvexAuth, useMutation } from "convex/react";
 import { Gamepad2, Home, LogOut, PanelLeftClose, PanelLeftOpen, UserRound } from "lucide-react";
 import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
 import { DevAdminLoginButton } from "@/components/dev-admin-login-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import { SIDEBAR_COOKIE_NAME } from "@/lib/ui-preferences";
 import { cn } from "@/lib/utils";
+import { Route as RootRoute } from "@/routes/__root";
 
 import { api } from "../../convex/_generated/api";
 
 const SIDEBAR_STORAGE_KEY = "backlogger:sidebar-collapsed";
-export const SIDEBAR_COOKIE_NAME = "backlogger-sidebar-collapsed";
 const SIDEBAR_PERSIST_MAX_AGE = 60 * 60 * 24 * 365;
 
 export function AppShell({
@@ -168,11 +169,17 @@ function persistSidebarState(value: boolean) {
 }
 
 function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
-  const { data: currentUser } = useSuspenseQuery(convexQuery(api.auth.getCurrentUser, {}));
-  const { data: session } = authClient.useSession();
+  const { currentUser: initialCurrentUser, isAuthenticated } = useRouteContext({
+    from: RootRoute.id,
+  });
+  const convexAuth = useConvexAuth();
+  const canSubscribeToCurrentUser = !isAuthenticated || convexAuth.isAuthenticated;
+  const { data: liveCurrentUser } = useQuery(
+    convexQuery(api.auth.getCurrentUser, canSubscribeToCurrentUser ? {} : "skip"),
+  );
   const syncViewerProfile = useMutation(api.gameEntries.syncViewerProfile);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const user = session?.user ?? currentUser;
+  const user = liveCurrentUser ?? initialCurrentUser;
   const initials = getInitials(user?.name ?? "Player");
 
   useEffect(() => {

@@ -13,9 +13,9 @@ import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 
-import { SIDEBAR_COOKIE_NAME } from "@/components/app-shell";
 import { authClient } from "@/lib/auth-client";
 import { getToken } from "@/lib/auth-server";
+import { SIDEBAR_COOKIE_NAME } from "@/lib/ui-preferences";
 
 import { api } from "../../convex/_generated/api";
 
@@ -63,9 +63,12 @@ export const Route = createRootRouteWithContext<{
       ctx.context.convexQueryClient.serverHttpClient?.setAuth(token);
     }
 
-    await ctx.context.queryClient.ensureQueryData(convexQuery(api.auth.getCurrentUser, {}));
+    const currentUser = await ctx.context.queryClient.ensureQueryData(
+      convexQuery(api.auth.getCurrentUser, {}),
+    );
 
     return {
+      currentUser,
       isAuthenticated: Boolean(token),
       isSidebarCollapsed: uiPreferences.isSidebarCollapsed,
       token,

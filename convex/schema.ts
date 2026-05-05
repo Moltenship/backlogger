@@ -11,6 +11,21 @@ export default defineSchema({
   })
     .index("by_userTokenIdentifier", ["userTokenIdentifier"])
     .index("by_publicProfileId", ["publicProfileId"]),
+  follows: defineTable({
+    followerTokenIdentifier: v.string(),
+    followingTokenIdentifier: v.string(),
+    followingPublicProfileId: v.string(),
+    followingDisplayName: v.string(),
+    followingImageUrl: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_followerTokenIdentifier", ["followerTokenIdentifier"])
+    .index("by_followingTokenIdentifier", ["followingTokenIdentifier"])
+    .index("by_followerTokenIdentifier_and_followingTokenIdentifier", [
+      "followerTokenIdentifier",
+      "followingTokenIdentifier",
+    ]),
   gameEntries: defineTable({
     userTokenIdentifier: v.string(),
     igdbId: v.number(),

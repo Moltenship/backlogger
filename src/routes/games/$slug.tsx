@@ -1,5 +1,5 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import {
   createFileRoute,
   Link,
@@ -9,6 +9,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { useConvexAuth, useMutation } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import {
   CalendarDays,
   ChevronDown,
@@ -67,17 +68,18 @@ import { gameQueryOptions } from "@/lib/igdb-query";
 import { api } from "../../../convex/_generated/api";
 import { Route as RootRoute } from "../__root";
 
+type ViewerEntry = FunctionReturnType<typeof api.gameEntries.viewerEntry>;
+
 export const Route = createFileRoute("/games/$slug")({
   loader: async ({ context, params }) => {
     const data = await context.queryClient.ensureQueryData(gameQueryOptions(params.slug));
+    const viewerEntry = data.game
+      ? await context.queryClient.ensureQueryData(
+          convexQuery(api.gameEntries.viewerEntry, { igdbId: data.game.id }),
+        )
+      : null;
 
-    if (data.game) {
-      await context.queryClient.ensureQueryData(
-        convexQuery(api.gameEntries.viewerEntry, { igdbId: data.game.id }),
-      );
-    }
-
-    return data;
+    return { data, viewerEntry };
   },
   component: GamePage,
 });
@@ -98,8 +100,11 @@ type GameTab = "overview" | "related" | "community";
 
 function GamePage() {
   const { slug } = Route.useParams();
+  const loaderData = Route.useLoaderData();
   const { data } = useSuspenseQuery(gameQueryOptions(slug));
   const { isSidebarCollapsed } = useRouteContext({ from: RootRoute.id });
+  const initialViewerEntry =
+    data.game?.id === loaderData.data.game?.id ? loaderData.viewerEntry : null;
 
   return (
     <AppShell initialSidebarCollapsed={isSidebarCollapsed}>
@@ -120,27 +125,41 @@ function GamePage() {
           </Link>
         </div>
 
-        {data.game ? <GameDetail game={data.game} /> : <GameError error={data.error} />}
+        {data.game ? (
+          <GameDetail game={data.game} initialViewerEntry={initialViewerEntry} />
+        ) : (
+          <GameError error={data.error} />
+        )}
       </div>
     </AppShell>
   );
 }
 
-function GameDetail({ game }: { game: IgdbGamePage }) {
+function GameDetail({
+  game,
+  initialViewerEntry,
+}: {
+  game: IgdbGamePage;
+  initialViewerEntry: ViewerEntry;
+}) {
   const activeTab = useActiveGameTab();
   const navigate = useNavigate();
-  const { data: session } = authClient.useSession();
+  const { isAuthenticated } = useRouteContext({ from: RootRoute.id });
   const convexAuth = useConvexAuth();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isEntryDialogOpen, setIsEntryDialogOpen] = useState(false);
   const [draftStatus, setDraftStatus] = useState<GameEntryStatus>("backlog");
-  const { data: viewerEntry, isPending: isEntryLoading } = useSuspenseQuery(
-    convexQuery(api.gameEntries.viewerEntry, { igdbId: game.id }),
+  const canSubscribeToViewerEntry = !isAuthenticated || convexAuth.isAuthenticated;
+  const { data: liveViewerEntry, isPending: isEntryLoading } = useQuery(
+    convexQuery(
+      api.gameEntries.viewerEntry,
+      canSubscribeToViewerEntry ? { igdbId: game.id } : "skip",
+    ),
   );
+  const viewerEntry = liveViewerEntry ?? initialViewerEntry;
   const upsertGameEntry = useMutation(api.gameEntries.upsert);
   const [isSavingEntry, setIsSavingEntry] = useState(false);
-  const isEntryFormLoading = isEntryLoading;
-  const isAuthenticated = Boolean(session?.user) && convexAuth.isAuthenticated;
+  const isEntryFormLoading = canSubscribeToViewerEntry ? isEntryLoading : false;
   const currentStatus = viewerEntry?.status ?? draftStatus;
   const entryDialogValue: GameEntryFormValue = {
     status: draftStatus,
@@ -178,11 +197,7 @@ function GameDetail({ game }: { game: IgdbGamePage }) {
   async function saveEntry(value: GameEntryFormValue) {
     if (!isAuthenticated) {
       setIsEntryDialogOpen(false);
-      setSaveError(
-        session?.user
-          ? "Your login session is active, but the game library is not authenticated yet. Refresh the page or sign in again."
-          : "Sign in with Twitch before saving games to your library.",
-      );
+      setSaveError("Sign in with Twitch before saving games to your library.");
       return;
     }
 

@@ -94,7 +94,7 @@ async function getStats(ctx: QueryCtx | MutationCtx, userTokenIdentifier: string
     .unique();
 }
 
-async function getPublicUserProfile(ctx: QueryCtx, publicProfileId: string) {
+async function getPublicUserProfile(ctx: QueryCtx | MutationCtx, publicProfileId: string) {
   return await ctx.db
     .query("userProfiles")
     .withIndex("by_publicProfileId", (q) => q.eq("publicProfileId", publicProfileId))
@@ -152,6 +152,56 @@ async function getUserProfile(ctx: QueryCtx, userTokenIdentifier: string) {
       dropped,
     },
   };
+}
+
+async function getFollow(
+  ctx: QueryCtx | MutationCtx,
+  followerTokenIdentifier: string,
+  followingTokenIdentifier: string,
+) {
+  return await ctx.db
+    .query("follows")
+    .withIndex("by_followerTokenIdentifier_and_followingTokenIdentifier", (q) =>
+      q
+        .eq("followerTokenIdentifier", followerTokenIdentifier)
+        .eq("followingTokenIdentifier", followingTokenIdentifier),
+    )
+    .unique();
+}
+
+async function getViewerRelationship(
+  ctx: QueryCtx,
+  targetTokenIdentifier: string,
+): Promise<"signedOut" | "self" | "none" | "following" | "followedBy" | "friends"> {
+  const identity = await viewerIdentity(ctx);
+  const viewerTokenIdentifier = identity?.tokenIdentifier ?? null;
+
+  if (!viewerTokenIdentifier) {
+    return "signedOut";
+  }
+
+  if (viewerTokenIdentifier === targetTokenIdentifier) {
+    return "self";
+  }
+
+  const [viewerFollowsTarget, targetFollowsViewer] = await Promise.all([
+    getFollow(ctx, viewerTokenIdentifier, targetTokenIdentifier),
+    getFollow(ctx, targetTokenIdentifier, viewerTokenIdentifier),
+  ]);
+
+  if (viewerFollowsTarget && targetFollowsViewer) {
+    return "friends";
+  }
+
+  if (viewerFollowsTarget) {
+    return "following";
+  }
+
+  if (targetFollowsViewer) {
+    return "followedBy";
+  }
+
+  return "none";
 }
 
 function publicProfileIdFromTokenIdentifier(userTokenIdentifier: string) {
@@ -336,6 +386,56 @@ export const syncViewerProfile = mutation({
   },
 });
 
+export const followPublicProfile = mutation({
+  args: {
+    publicProfileId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await requireUserIdentity(ctx);
+    const followerTokenIdentifier = identity.tokenIdentifier;
+    const trimmedPublicProfileId = args.publicProfileId.trim();
+
+    if (!trimmedPublicProfileId.startsWith(`${publicProfilePrefix}_`)) {
+      throw new ConvexError("A valid public profile id is required.");
+    }
+
+    const targetProfile = await getPublicUserProfile(ctx, trimmedPublicProfileId);
+
+    if (!targetProfile) {
+      throw new ConvexError("Profile not found.");
+    }
+
+    if (targetProfile.userTokenIdentifier === followerTokenIdentifier) {
+      throw new ConvexError("You cannot follow yourself.");
+    }
+
+    const existingFollow = await getFollow(
+      ctx,
+      followerTokenIdentifier,
+      targetProfile.userTokenIdentifier,
+    );
+    const now = Date.now();
+    const followSnapshot = {
+      followingPublicProfileId: targetProfile.publicProfileId,
+      followingDisplayName: targetProfile.displayName,
+      followingImageUrl: targetProfile.imageUrl,
+      updatedAt: now,
+    };
+
+    if (existingFollow) {
+      await ctx.db.patch(existingFollow["_id"], followSnapshot);
+      return existingFollow["_id"];
+    }
+
+    return await ctx.db.insert("follows", {
+      followerTokenIdentifier,
+      followingTokenIdentifier: targetProfile.userTokenIdentifier,
+      createdAt: now,
+      ...followSnapshot,
+    });
+  },
+});
+
 export const getPublicProfile = query({
   args: {
     publicProfileId: v.string(),
@@ -357,6 +457,7 @@ export const getPublicProfile = query({
           image: publicUserProfile.imageUrl,
           publicProfileId: trimmedPublicProfileId,
         },
+        viewerRelationship: await getViewerRelationship(ctx, publicUserProfile.userTokenIdentifier),
       };
     }
 
@@ -378,6 +479,7 @@ export const getPublicProfile = query({
         image: identity.pictureUrl ?? null,
         publicProfileId: trimmedPublicProfileId,
       },
+      viewerRelationship: "self" as const,
     };
   },
 });
