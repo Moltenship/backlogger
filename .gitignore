@@ -45,4 +45,4 @@ __unconfig*
 !.husky
 !.oxlintrc.json
 !.oxfmtrc.json
-!.vercel
+.vercel
