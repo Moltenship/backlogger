@@ -1,9 +1,10 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
 import { Star, UserRound } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { DevAdminLoginButton } from "@/components/dev-admin-login-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
@@ -18,6 +19,21 @@ import { Route as RootRoute } from "@/routes/__root";
 import { api } from "../../convex/_generated/api";
 
 const PROFILE_SHELF_STATUSES = ["playing", "backlog", "completed", "dropped"] as const;
+const emptyProfile = {
+  counts: {
+    total: 0,
+    backlog: 0,
+    playing: 0,
+    completed: 0,
+    dropped: 0,
+  },
+  shelves: {
+    playing: [],
+    backlog: [],
+    completed: [],
+    dropped: [],
+  },
+} satisfies GameEntryProfile;
 
 export const Route = createFileRoute("/profile")({
   loader: async ({ context }) => {
@@ -28,8 +44,15 @@ export const Route = createFileRoute("/profile")({
 
 function ProfilePage() {
   const { isSidebarCollapsed } = useRouteContext({ from: RootRoute.id });
-  const { data: user } = useSuspenseQuery(convexQuery(api.auth.getCurrentUser, {}));
-  const { data: profile } = useSuspenseQuery(convexQuery(api.gameEntries.listViewerProfile, {}));
+  const { data: currentUser } = useSuspenseQuery(convexQuery(api.auth.getCurrentUser, {}));
+  const { data: session } = authClient.useSession();
+  const { data } = useQuery({
+    ...convexQuery(api.gameEntries.listViewerProfile, {}),
+    select: (value) => value ?? emptyProfile,
+    placeholderData: (previousProfile) => previousProfile ?? emptyProfile,
+  });
+  const profile = data ?? emptyProfile;
+  const user = session?.user ?? currentUser;
   const isSignedIn = Boolean(user);
   const initials = getInitials(user?.name ?? "User");
 
@@ -61,34 +84,31 @@ function ProfilePage() {
             </div>
           </div>
 
-          {profile ? (
-            <div className="mt-5 grid gap-2 sm:grid-cols-5">
-              <CountBadge label="Total" value={profile.counts.total} />
-              {GAME_ENTRY_STATUSES.map((status) => (
-                <CountBadge
-                  key={status}
-                  label={GAME_ENTRY_STATUS_LABELS[status]}
-                  value={profile.counts[status]}
-                />
-              ))}
-            </div>
-          ) : null}
+          <div className="mt-5 grid gap-2 sm:grid-cols-5">
+            <CountBadge label="Total" value={profile.counts.total} />
+            {GAME_ENTRY_STATUSES.map((status) => (
+              <CountBadge
+                key={status}
+                label={GAME_ENTRY_STATUS_LABELS[status]}
+                value={profile.counts[status]}
+              />
+            ))}
+          </div>
 
           {!isSignedIn ? (
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Button onClick={signInWithTwitch}>Sign in with Twitch</Button>
+              <DevAdminLoginButton size="default" />
               <p className="text-muted-foreground text-sm">Sign in to build your game library.</p>
             </div>
           ) : null}
         </section>
 
-        {profile ? (
-          <div className="mt-5 space-y-5">
-            {PROFILE_SHELF_STATUSES.map((status) => (
-              <ProfileShelf key={status} status={status} games={profile.shelves[status]} />
-            ))}
-          </div>
-        ) : null}
+        <div className="mt-5 space-y-5">
+          {PROFILE_SHELF_STATUSES.map((status) => (
+            <ProfileShelf key={status} status={status} games={profile.shelves[status]} />
+          ))}
+        </div>
       </div>
     </AppShell>
   );

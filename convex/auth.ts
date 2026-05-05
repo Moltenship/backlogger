@@ -8,6 +8,7 @@ import { internalAction, query } from "./_generated/server";
 import authConfig from "./auth.config";
 
 const siteUrl = process.env.SITE_URL;
+const isDevAdminAuthEnabled = process.env.DEV_ADMIN_AUTH_ENABLED === "true";
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
@@ -20,6 +21,11 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
       accountLinking: {
         enabled: true,
       },
+    },
+    emailAndPassword: {
+      enabled: isDevAdminAuthEnabled,
+      autoSignIn: true,
+      requireEmailVerification: false,
     },
     socialProviders: {
       twitch: {

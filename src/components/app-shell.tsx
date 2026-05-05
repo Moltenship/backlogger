@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { Gamepad2, Home, LogOut, PanelLeftClose, PanelLeftOpen, UserRound } from "lucide-react";
 import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
+import { DevAdminLoginButton } from "@/components/dev-admin-login-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
@@ -235,6 +236,7 @@ function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
         >
           Sign in with Twitch
         </Button>
+        <DevAdminLoginButton className="mt-2 w-full" />
       </div>
     );
   }
