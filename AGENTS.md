@@ -14,6 +14,23 @@ Convex agent skills for common tasks can be installed by running
 
 <!-- convex-ai-end -->
 
+## Convex Auth + SSR
+
+- For TanStack Start SSR with Convex Better Auth, keep auth handling centralized:
+  `ConvexQueryClient` should use `expectAuth: true`, root `beforeLoad` should
+  set `serverHttpClient` auth from the SSR token, and
+  `ConvexBetterAuthProvider` should receive `initialToken`.
+- Do not gate SSR-safe authenticated Convex reads with `useConvexAuth()` or
+  `"skip"` during the client auth handoff. If a query can safely return `null`
+  for signed-out users, subscribe to it directly and let Convex/auth hydration
+  settle. Per-route skip gates caused UI flicker and stale signed-out states.
+- Keep auth-derived UI state centralized when possible. If SSR data can briefly
+  contain signed-out relationship data while root auth already has a token, do
+  not show sign-in CTAs to authenticated users; hide or derive a neutral state
+  until the authenticated relationship query resolves.
+- Add regression coverage for SSR auth query policy or relationship-button
+  behavior when changing this area.
+
 ## Task Completion Requirements
 
 - `bun run check` and `bun run test` must pass before considering tasks completed. Never use `bun test` use `bun run test` instead

@@ -1,7 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouteContext } from "@tanstack/react-router";
-import { useConvexAuth, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import { Gamepad2, Home, LogOut, PanelLeftClose, PanelLeftOpen, UserRound } from "lucide-react";
 import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
@@ -169,14 +169,10 @@ function persistSidebarState(value: boolean) {
 }
 
 function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
-  const { currentUser: initialCurrentUser, isAuthenticated } = useRouteContext({
+  const { currentUser: initialCurrentUser } = useRouteContext({
     from: RootRoute.id,
   });
-  const convexAuth = useConvexAuth();
-  const canSubscribeToCurrentUser = !isAuthenticated || convexAuth.isAuthenticated;
-  const { data: liveCurrentUser } = useQuery(
-    convexQuery(api.auth.getCurrentUser, canSubscribeToCurrentUser ? {} : "skip"),
-  );
+  const { data: liveCurrentUser } = useQuery(convexQuery(api.auth.getCurrentUser, {}));
   const syncViewerProfile = useMutation(api.gameEntries.syncViewerProfile);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const user = liveCurrentUser ?? initialCurrentUser;

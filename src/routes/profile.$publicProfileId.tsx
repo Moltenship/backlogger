@@ -1,7 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
-import { useConvexAuth, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import { UserRound } from "lucide-react";
 import { useState } from "react";
 
@@ -10,6 +10,7 @@ import { CountBadge, PROFILE_SHELF_STATUSES, ProfileShelf } from "@/components/p
 import { Button, buttonVariants } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { GAME_ENTRY_STATUS_LABELS, type GameEntryProfile } from "@/lib/game-entry";
+import { getFollowButtonState, type ViewerRelationship } from "@/lib/profile-relationship";
 import { Route as RootRoute } from "@/routes/__root";
 
 import { api } from "../../convex/_generated/api";
@@ -28,17 +29,10 @@ function PublicProfilePage() {
   const { publicProfileId } = Route.useParams();
   const loaderData = Route.useLoaderData();
   const { isAuthenticated, isSidebarCollapsed } = useRouteContext({ from: RootRoute.id });
-  const convexAuth = useConvexAuth();
-  const canSubscribeToProfile = !isAuthenticated || convexAuth.isAuthenticated;
   const { data } = useQuery(
-    convexQuery(
-      api.gameEntries.getPublicProfile,
-      canSubscribeToProfile
-        ? {
-            publicProfileId,
-          }
-        : "skip",
-    ),
+    convexQuery(api.gameEntries.getPublicProfile, {
+      publicProfileId,
+    }),
   );
   const profileData = data ?? loaderData;
 
@@ -48,6 +42,7 @@ function PublicProfilePage() {
         {profileData ? (
           <PublicProfileContent
             profile={profileData.profile}
+            isAuthenticated={isAuthenticated}
             user={profileData.user}
             viewerRelationship={profileData.viewerRelationship}
           />
@@ -70,12 +65,14 @@ function PublicProfilePage() {
 
 function PublicProfileContent({
   profile,
+  isAuthenticated,
   user,
   viewerRelationship,
 }: {
   profile: GameEntryProfile;
+  isAuthenticated: boolean;
   user: { image: string | null; name: string; publicProfileId: string };
-  viewerRelationship: "signedOut" | "self" | "none" | "following" | "followedBy" | "friends";
+  viewerRelationship: ViewerRelationship;
 }) {
   const initials = getInitials(user.name);
   const followPublicProfile = useMutation(api.gameEntries.followPublicProfile);
@@ -120,6 +117,7 @@ function PublicProfileContent({
           </div>
 
           <FollowButton
+            isAuthenticated={isAuthenticated}
             relationship={viewerRelationship}
             isSubmitting={isFollowing}
             onFollow={followProfile}
@@ -156,47 +154,47 @@ function PublicProfileContent({
 }
 
 function FollowButton({
+  isAuthenticated,
   isSubmitting,
   onFollow,
   onSignIn,
   relationship,
 }: {
+  isAuthenticated: boolean;
   isSubmitting: boolean;
   onFollow: () => void;
   onSignIn: () => void;
-  relationship: "signedOut" | "self" | "none" | "following" | "followedBy" | "friends";
+  relationship: ViewerRelationship;
 }) {
-  if (relationship === "self") {
+  const state = getFollowButtonState({
+    isAuthenticated,
+    isSubmitting,
+    relationship,
+  });
+
+  if (state.kind === "hidden") {
     return null;
   }
 
-  if (relationship === "signedOut") {
+  if (state.kind === "signIn") {
     return (
       <Button variant="outline" onClick={onSignIn}>
-        Sign in to follow
+        {state.label}
       </Button>
     );
   }
 
-  if (relationship === "friends") {
+  if (state.kind === "status") {
     return (
       <Button variant="secondary" disabled>
-        Friends
-      </Button>
-    );
-  }
-
-  if (relationship === "following") {
-    return (
-      <Button variant="secondary" disabled>
-        Following
+        {state.label}
       </Button>
     );
   }
 
   return (
-    <Button onClick={onFollow} disabled={isSubmitting}>
-      {relationship === "followedBy" ? "Follow back" : "Follow"}
+    <Button onClick={onFollow} disabled={state.isDisabled}>
+      {state.label}
     </Button>
   );
 }

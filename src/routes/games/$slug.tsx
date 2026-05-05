@@ -8,7 +8,7 @@ import {
   useRouteContext,
   useRouterState,
 } from "@tanstack/react-router";
-import { useConvexAuth, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import {
   CalendarDays,
@@ -145,21 +145,16 @@ function GameDetail({
   const activeTab = useActiveGameTab();
   const navigate = useNavigate();
   const { isAuthenticated } = useRouteContext({ from: RootRoute.id });
-  const convexAuth = useConvexAuth();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isEntryDialogOpen, setIsEntryDialogOpen] = useState(false);
   const [draftStatus, setDraftStatus] = useState<GameEntryStatus>("backlog");
-  const canSubscribeToViewerEntry = !isAuthenticated || convexAuth.isAuthenticated;
   const { data: liveViewerEntry, isPending: isEntryLoading } = useQuery(
-    convexQuery(
-      api.gameEntries.viewerEntry,
-      canSubscribeToViewerEntry ? { igdbId: game.id } : "skip",
-    ),
+    convexQuery(api.gameEntries.viewerEntry, { igdbId: game.id }),
   );
   const viewerEntry = liveViewerEntry ?? initialViewerEntry;
   const upsertGameEntry = useMutation(api.gameEntries.upsert);
   const [isSavingEntry, setIsSavingEntry] = useState(false);
-  const isEntryFormLoading = canSubscribeToViewerEntry ? isEntryLoading : false;
+  const isEntryFormLoading = isEntryLoading;
   const currentStatus = viewerEntry?.status ?? draftStatus;
   const entryDialogValue: GameEntryFormValue = {
     status: draftStatus,
