@@ -2,6 +2,15 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  userProfiles: defineTable({
+    userTokenIdentifier: v.string(),
+    publicProfileId: v.string(),
+    displayName: v.string(),
+    imageUrl: v.union(v.string(), v.null()),
+    updatedAt: v.number(),
+  })
+    .index("by_userTokenIdentifier", ["userTokenIdentifier"])
+    .index("by_publicProfileId", ["publicProfileId"]),
   gameEntries: defineTable({
     userTokenIdentifier: v.string(),
     igdbId: v.number(),
@@ -30,11 +39,16 @@ export default defineSchema({
     .index("by_userTokenIdentifier", ["userTokenIdentifier"]),
   gameEntryStats: defineTable({
     userTokenIdentifier: v.string(),
+    publicProfileId: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    imageUrl: v.optional(v.union(v.string(), v.null())),
     total: v.number(),
     backlog: v.number(),
     playing: v.number(),
     completed: v.number(),
     dropped: v.number(),
     updatedAt: v.number(),
-  }).index("by_userTokenIdentifier", ["userTokenIdentifier"]),
+  })
+    .index("by_userTokenIdentifier", ["userTokenIdentifier"])
+    .index("by_publicProfileId", ["publicProfileId"]),
 });

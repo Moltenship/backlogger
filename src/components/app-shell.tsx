@@ -1,6 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { Gamepad2, Home, LogOut, PanelLeftClose, PanelLeftOpen, UserRound } from "lucide-react";
 import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
@@ -169,9 +170,20 @@ function persistSidebarState(value: boolean) {
 function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
   const { data: currentUser } = useSuspenseQuery(convexQuery(api.auth.getCurrentUser, {}));
   const { data: session } = authClient.useSession();
+  const syncViewerProfile = useMutation(api.gameEntries.syncViewerProfile);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const user = session?.user ?? currentUser;
   const initials = getInitials(user?.name ?? "Player");
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    syncViewerProfile({}).catch((error: unknown) => {
+      console.error(error);
+    });
+  }, [syncViewerProfile, user]);
 
   async function signInWithTwitch() {
     setIsSubmitting(true);

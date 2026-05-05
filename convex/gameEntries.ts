@@ -1,7 +1,9 @@
+import type { UserIdentity } from "convex/server";
 import { ConvexError, v } from "convex/values";
 
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 
+const publicProfilePrefix = "u";
 const statusValidator = v.union(
   v.literal("backlog"),
   v.literal("playing"),
@@ -21,18 +23,23 @@ const shelfLimit = 12;
 
 type EntryStatus = "backlog" | "playing" | "completed" | "dropped";
 
-async function requireUserTokenIdentifier(ctx: QueryCtx | MutationCtx) {
+async function requireUserIdentity(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
 
   if (!identity) {
     throw new ConvexError("Authentication is required.");
   }
 
-  return identity.tokenIdentifier;
+  return identity;
+}
+
+async function viewerIdentity(ctx: QueryCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  return identity ?? null;
 }
 
 async function viewerTokenIdentifier(ctx: QueryCtx) {
-  const identity = await ctx.auth.getUserIdentity();
+  const identity = await viewerIdentity(ctx);
   return identity?.tokenIdentifier ?? null;
 }
 
@@ -87,17 +94,93 @@ async function getStats(ctx: QueryCtx | MutationCtx, userTokenIdentifier: string
     .unique();
 }
 
+async function getPublicUserProfile(ctx: QueryCtx, publicProfileId: string) {
+  return await ctx.db
+    .query("userProfiles")
+    .withIndex("by_publicProfileId", (q) => q.eq("publicProfileId", publicProfileId))
+    .unique();
+}
+
+async function upsertUserProfile(ctx: MutationCtx, identity: UserIdentity, now: number) {
+  const userTokenIdentifier = identity.tokenIdentifier;
+  const publicProfileId = publicProfileIdFromTokenIdentifier(userTokenIdentifier);
+  const existingProfile = await ctx.db
+    .query("userProfiles")
+    .withIndex("by_userTokenIdentifier", (q) => q.eq("userTokenIdentifier", userTokenIdentifier))
+    .unique();
+  const profile = {
+    publicProfileId,
+    displayName: identity.name ?? "Player",
+    imageUrl: identity.pictureUrl ?? null,
+    updatedAt: now,
+  };
+
+  if (existingProfile) {
+    await ctx.db.patch(existingProfile["_id"], profile);
+    return publicProfileId;
+  }
+
+  await ctx.db.insert("userProfiles", {
+    userTokenIdentifier,
+    ...profile,
+  });
+
+  return publicProfileId;
+}
+
+async function getUserProfile(ctx: QueryCtx, userTokenIdentifier: string) {
+  const stats = await getStats(ctx, userTokenIdentifier);
+  const [playing, backlog, completed, dropped] = await Promise.all([
+    latestEntriesByStatus(ctx, userTokenIdentifier, "playing"),
+    latestEntriesByStatus(ctx, userTokenIdentifier, "backlog"),
+    latestEntriesByStatus(ctx, userTokenIdentifier, "completed"),
+    latestEntriesByStatus(ctx, userTokenIdentifier, "dropped"),
+  ]);
+
+  return {
+    counts: {
+      total: stats?.total ?? 0,
+      backlog: stats?.backlog ?? 0,
+      playing: stats?.playing ?? 0,
+      completed: stats?.completed ?? 0,
+      dropped: stats?.dropped ?? 0,
+    },
+    shelves: {
+      playing,
+      backlog,
+      completed,
+      dropped,
+    },
+  };
+}
+
+function publicProfileIdFromTokenIdentifier(userTokenIdentifier: string) {
+  return `${publicProfilePrefix}_${hashString(userTokenIdentifier)}`;
+}
+
+function hashString(value: string) {
+  let hash = 17;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % Number.MAX_SAFE_INTEGER;
+  }
+
+  return Math.abs(hash).toString(36);
+}
+
 function statusDelta(status: EntryStatus, from: EntryStatus | null, to: EntryStatus) {
   return (to === status ? 1 : 0) - (from === status ? 1 : 0);
 }
 
 async function updateStatsForUpsert(
   ctx: MutationCtx,
-  userTokenIdentifier: string,
+  identity: UserIdentity,
   previousStatus: EntryStatus | null,
   nextStatus: EntryStatus,
   now: number,
 ) {
+  const userTokenIdentifier = identity.tokenIdentifier;
+  const publicProfileId = await upsertUserProfile(ctx, identity, now);
   const existingStats = await getStats(ctx, userTokenIdentifier);
   const baseStats = existingStats ?? {
     total: previousStatus === null ? 0 : 1,
@@ -112,6 +195,9 @@ async function updateStatsForUpsert(
     playing: baseStats.playing + statusDelta("playing", previousStatus, nextStatus),
     completed: baseStats.completed + statusDelta("completed", previousStatus, nextStatus),
     dropped: baseStats.dropped + statusDelta("dropped", previousStatus, nextStatus),
+    displayName: identity.name ?? "Player",
+    imageUrl: identity.pictureUrl ?? null,
+    publicProfileId,
     updatedAt: now,
   };
 
@@ -168,7 +254,8 @@ export const upsert = mutation({
     review: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
-    const userTokenIdentifier = await requireUserTokenIdentifier(ctx);
+    const identity = await requireUserIdentity(ctx);
+    const userTokenIdentifier = identity.tokenIdentifier;
     assertGameSnapshot(args.game);
 
     const existing = await ctx.db
@@ -183,13 +270,7 @@ export const upsert = mutation({
     const review =
       args.review === undefined ? (existing?.review ?? null) : normalizeReview(args.review);
     const coverUrl = args.game.coverUrl?.trim() ?? null;
-    await updateStatsForUpsert(
-      ctx,
-      userTokenIdentifier,
-      existing?.status ?? null,
-      args.status,
-      now,
-    );
+    await updateStatsForUpsert(ctx, identity, existing?.status ?? null, args.status, now);
 
     if (existing) {
       const existingId = existing["_id"];
@@ -227,33 +308,75 @@ export const upsert = mutation({
 export const listViewerProfile = query({
   args: {},
   handler: async (ctx) => {
-    const userTokenIdentifier = await viewerTokenIdentifier(ctx);
+    const identity = await viewerIdentity(ctx);
+    const userTokenIdentifier = identity?.tokenIdentifier ?? null;
 
-    if (!userTokenIdentifier) {
+    if (!identity || !userTokenIdentifier) {
       return null;
     }
 
-    const stats = await getStats(ctx, userTokenIdentifier);
-    const [playing, backlog, completed, dropped] = await Promise.all([
-      latestEntriesByStatus(ctx, userTokenIdentifier, "playing"),
-      latestEntriesByStatus(ctx, userTokenIdentifier, "backlog"),
-      latestEntriesByStatus(ctx, userTokenIdentifier, "completed"),
-      latestEntriesByStatus(ctx, userTokenIdentifier, "dropped"),
-    ]);
+    const profile = await getUserProfile(ctx, userTokenIdentifier);
 
     return {
-      counts: {
-        total: stats?.total ?? 0,
-        backlog: stats?.backlog ?? 0,
-        playing: stats?.playing ?? 0,
-        completed: stats?.completed ?? 0,
-        dropped: stats?.dropped ?? 0,
+      profile,
+      user: {
+        name: identity.name ?? "Player",
+        image: identity.pictureUrl ?? null,
+        publicProfileId: publicProfileIdFromTokenIdentifier(userTokenIdentifier),
       },
-      shelves: {
-        playing,
-        backlog,
-        completed,
-        dropped,
+    };
+  },
+});
+
+export const syncViewerProfile = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await requireUserIdentity(ctx);
+    return await upsertUserProfile(ctx, identity, Date.now());
+  },
+});
+
+export const getPublicProfile = query({
+  args: {
+    publicProfileId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const trimmedPublicProfileId = args.publicProfileId.trim();
+
+    if (!trimmedPublicProfileId.startsWith(`${publicProfilePrefix}_`)) {
+      return null;
+    }
+
+    const publicUserProfile = await getPublicUserProfile(ctx, trimmedPublicProfileId);
+
+    if (publicUserProfile) {
+      return {
+        profile: await getUserProfile(ctx, publicUserProfile.userTokenIdentifier),
+        user: {
+          name: publicUserProfile.displayName,
+          image: publicUserProfile.imageUrl,
+          publicProfileId: trimmedPublicProfileId,
+        },
+      };
+    }
+
+    const identity = await viewerIdentity(ctx);
+    const userTokenIdentifier = identity?.tokenIdentifier ?? null;
+
+    if (
+      !identity ||
+      !userTokenIdentifier ||
+      publicProfileIdFromTokenIdentifier(userTokenIdentifier) !== trimmedPublicProfileId
+    ) {
+      return null;
+    }
+
+    return {
+      profile: await getUserProfile(ctx, userTokenIdentifier),
+      user: {
+        name: identity.name ?? "Player",
+        image: identity.pictureUrl ?? null,
+        publicProfileId: trimmedPublicProfileId,
       },
     };
   },

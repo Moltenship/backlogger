@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProfileIndexRouteImport } from './routes/profile/index'
 import { Route as GamesIndexRouteImport } from './routes/games/index'
+import { Route as ProfilePublicProfileIdRouteImport } from './routes/profile.$publicProfileId'
 import { Route as GamesSlugRouteImport } from './routes/games/$slug'
 import { Route as GamesSlugIndexRouteImport } from './routes/games/$slug/index'
 import { Route as GamesSlugRelatedRouteImport } from './routes/games/$slug/related'
@@ -29,10 +31,20 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProfileIndexRoute = ProfileIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProfileRoute,
+} as any)
 const GamesIndexRoute = GamesIndexRouteImport.update({
   id: '/games/',
   path: '/games/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ProfilePublicProfileIdRoute = ProfilePublicProfileIdRouteImport.update({
+  id: '/$publicProfileId',
+  path: '/$publicProfileId',
+  getParentRoute: () => ProfileRoute,
 } as any)
 const GamesSlugRoute = GamesSlugRouteImport.update({
   id: '/games/$slug',
@@ -67,9 +79,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/profile': typeof ProfileRoute
+  '/profile': typeof ProfileRouteWithChildren
   '/games/$slug': typeof GamesSlugRouteWithChildren
+  '/profile/$publicProfileId': typeof ProfilePublicProfileIdRoute
   '/games/': typeof GamesIndexRoute
+  '/profile/': typeof ProfileIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/games/$slug/community': typeof GamesSlugCommunityRoute
   '/games/$slug/overview': typeof GamesSlugOverviewRoute
@@ -78,8 +92,9 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/profile': typeof ProfileRoute
+  '/profile/$publicProfileId': typeof ProfilePublicProfileIdRoute
   '/games': typeof GamesIndexRoute
+  '/profile': typeof ProfileIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/games/$slug/community': typeof GamesSlugCommunityRoute
   '/games/$slug/overview': typeof GamesSlugOverviewRoute
@@ -89,9 +104,11 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/profile': typeof ProfileRoute
+  '/profile': typeof ProfileRouteWithChildren
   '/games/$slug': typeof GamesSlugRouteWithChildren
+  '/profile/$publicProfileId': typeof ProfilePublicProfileIdRoute
   '/games/': typeof GamesIndexRoute
+  '/profile/': typeof ProfileIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/games/$slug/community': typeof GamesSlugCommunityRoute
   '/games/$slug/overview': typeof GamesSlugOverviewRoute
@@ -104,7 +121,9 @@ export interface FileRouteTypes {
     | '/'
     | '/profile'
     | '/games/$slug'
+    | '/profile/$publicProfileId'
     | '/games/'
+    | '/profile/'
     | '/api/auth/$'
     | '/games/$slug/community'
     | '/games/$slug/overview'
@@ -113,8 +132,9 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/profile'
+    | '/profile/$publicProfileId'
     | '/games'
+    | '/profile'
     | '/api/auth/$'
     | '/games/$slug/community'
     | '/games/$slug/overview'
@@ -125,7 +145,9 @@ export interface FileRouteTypes {
     | '/'
     | '/profile'
     | '/games/$slug'
+    | '/profile/$publicProfileId'
     | '/games/'
+    | '/profile/'
     | '/api/auth/$'
     | '/games/$slug/community'
     | '/games/$slug/overview'
@@ -135,7 +157,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ProfileRoute: typeof ProfileRoute
+  ProfileRoute: typeof ProfileRouteWithChildren
   GamesSlugRoute: typeof GamesSlugRouteWithChildren
   GamesIndexRoute: typeof GamesIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -157,12 +179,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/profile/': {
+      id: '/profile/'
+      path: '/'
+      fullPath: '/profile/'
+      preLoaderRoute: typeof ProfileIndexRouteImport
+      parentRoute: typeof ProfileRoute
+    }
     '/games/': {
       id: '/games/'
       path: '/games'
       fullPath: '/games/'
       preLoaderRoute: typeof GamesIndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/profile/$publicProfileId': {
+      id: '/profile/$publicProfileId'
+      path: '/$publicProfileId'
+      fullPath: '/profile/$publicProfileId'
+      preLoaderRoute: typeof ProfilePublicProfileIdRouteImport
+      parentRoute: typeof ProfileRoute
     }
     '/games/$slug': {
       id: '/games/$slug'
@@ -209,6 +245,19 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ProfileRouteChildren {
+  ProfilePublicProfileIdRoute: typeof ProfilePublicProfileIdRoute
+  ProfileIndexRoute: typeof ProfileIndexRoute
+}
+
+const ProfileRouteChildren: ProfileRouteChildren = {
+  ProfilePublicProfileIdRoute: ProfilePublicProfileIdRoute,
+  ProfileIndexRoute: ProfileIndexRoute,
+}
+
+const ProfileRouteWithChildren =
+  ProfileRoute._addFileChildren(ProfileRouteChildren)
+
 interface GamesSlugRouteChildren {
   GamesSlugCommunityRoute: typeof GamesSlugCommunityRoute
   GamesSlugOverviewRoute: typeof GamesSlugOverviewRoute
@@ -229,7 +278,7 @@ const GamesSlugRouteWithChildren = GamesSlugRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ProfileRoute: ProfileRoute,
+  ProfileRoute: ProfileRouteWithChildren,
   GamesSlugRoute: GamesSlugRouteWithChildren,
   GamesIndexRoute: GamesIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
