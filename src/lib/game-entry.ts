@@ -21,12 +21,52 @@ export interface GameEntryCard extends GameEntrySnapshot {
   status: GameEntryStatus;
   rating: number | null;
   review: string | null;
+  playthroughCount: number;
+  playthroughIndex: number;
   updatedAt: number;
 }
 
 export interface GameEntryProfile {
   counts: Record<GameEntryStatus | "total", number>;
   shelves: Record<GameEntryStatus, GameEntryCard[]>;
+  activity: GameEntryProfileActivity;
+}
+
+export interface GameEntryActivityBucket {
+  dayKey: string;
+  count: number;
+}
+
+export interface GameEntryActivityItem {
+  id: string;
+  dayKey: string;
+  createdAt: number;
+  igdbId: number;
+  slug: string;
+  name: string;
+  coverUrl: string | null;
+  review: string | null;
+  fromStatus: GameEntryStatus | null;
+  toStatus: GameEntryStatus;
+  playthroughIndex: number;
+}
+
+export interface GameEntryActivitySummary {
+  recentActiveDays: number;
+  recentStatusUpdates: number;
+  recentActivityLimit: number;
+}
+
+export interface GameEntryProfileActivity {
+  summary: GameEntryActivitySummary;
+  heatmap: GameEntryActivityBucket[];
+  recent: GameEntryActivityItem[];
+}
+
+export interface GameEntryActivityMessageInput {
+  name: string;
+  toStatus: GameEntryStatus;
+  playthroughIndex: number;
 }
 
 export function isGameEntryStatus(value: string): value is GameEntryStatus {
@@ -48,4 +88,34 @@ export function normalizeReview(value: string | null): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+export function formatDayKey(timestamp: number): string {
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+export function getPlaythroughLabel(playthroughCount: number): string | null {
+  return playthroughCount > 1 ? `${playthroughCount} playthroughs` : null;
+}
+
+export function formatActivityMessage({
+  name,
+  playthroughIndex,
+  toStatus,
+}: GameEntryActivityMessageInput): string {
+  const isReplay = playthroughIndex > 1;
+
+  if (toStatus === "playing") {
+    return isReplay ? `Started replaying ${name}` : `Started playing ${name}`;
+  }
+
+  if (toStatus === "completed") {
+    return isReplay ? `Completed a replay of ${name}` : `Completed ${name}`;
+  }
+
+  if (toStatus === "dropped") {
+    return `Dropped ${name}`;
+  }
+
+  return `Backlogged ${name}`;
 }

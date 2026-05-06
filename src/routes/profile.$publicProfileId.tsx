@@ -6,6 +6,7 @@ import { UserRound } from "lucide-react";
 import { useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { ProfileActivity } from "@/components/profile-activity";
 import { CountBadge, PROFILE_SHELF_STATUSES, ProfileShelf } from "@/components/profile-library";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
@@ -138,6 +139,10 @@ function PublicProfileContent({
           ))}
         </div>
       </section>
+
+      <div className="mt-5">
+        <ProfileActivity activity={profile.activity} />
+      </div>
 
       <div className="mt-5 space-y-5">
         {PROFILE_SHELF_STATUSES.map((status) => (

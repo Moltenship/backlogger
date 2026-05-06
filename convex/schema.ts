@@ -41,10 +41,16 @@ export default defineSchema({
     ),
     rating: v.union(v.number(), v.null()),
     review: v.union(v.string(), v.null()),
+    playthroughIndex: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_userTokenIdentifier_and_igdbId", ["userTokenIdentifier", "igdbId"])
+    .index("by_userTokenIdentifier_and_igdbId_and_updatedAt", [
+      "userTokenIdentifier",
+      "igdbId",
+      "updatedAt",
+    ])
     .index("by_userTokenIdentifier_and_status", ["userTokenIdentifier", "status"])
     .index("by_userTokenIdentifier_and_status_and_updatedAt", [
       "userTokenIdentifier",
@@ -52,6 +58,35 @@ export default defineSchema({
       "updatedAt",
     ])
     .index("by_userTokenIdentifier", ["userTokenIdentifier"]),
+  gameEntryActivities: defineTable({
+    userTokenIdentifier: v.string(),
+    publicProfileId: v.string(),
+    gameEntryId: v.id("gameEntries"),
+    igdbId: v.number(),
+    slug: v.string(),
+    name: v.string(),
+    coverUrl: v.union(v.string(), v.null()),
+    review: v.optional(v.union(v.string(), v.null())),
+    playthroughIndex: v.number(),
+    fromStatus: v.union(
+      v.literal("backlog"),
+      v.literal("playing"),
+      v.literal("completed"),
+      v.literal("dropped"),
+      v.null(),
+    ),
+    toStatus: v.union(
+      v.literal("backlog"),
+      v.literal("playing"),
+      v.literal("completed"),
+      v.literal("dropped"),
+    ),
+    dayKey: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_userTokenIdentifier_and_dayKey", ["userTokenIdentifier", "dayKey"])
+    .index("by_publicProfileId_and_dayKey", ["publicProfileId", "dayKey"])
+    .index("by_publicProfileId_and_createdAt", ["publicProfileId", "createdAt"]),
   gameEntryStats: defineTable({
     userTokenIdentifier: v.string(),
     publicProfileId: v.optional(v.string()),

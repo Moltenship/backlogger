@@ -1,6 +1,7 @@
 import type { UserIdentity } from "convex/server";
 import { ConvexError, v } from "convex/values";
 
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 
 const publicProfilePrefix = "u";
@@ -20,6 +21,10 @@ const gameSnapshotValidator = v.object({
 });
 
 const shelfLimit = 12;
+const shelfScanMaxEntries = shelfLimit * 25;
+const profilePlaythroughCountScanLimit = 1_000;
+const profileActivityScanLimit = 100;
+const profileRecentActivityLimit = 12;
 
 type EntryStatus = "backlog" | "playing" | "completed" | "dropped";
 
@@ -128,13 +133,16 @@ async function upsertUserProfile(ctx: MutationCtx, identity: UserIdentity, now: 
   return publicProfileId;
 }
 
-async function getUserProfile(ctx: QueryCtx, userTokenIdentifier: string) {
-  const stats = await getStats(ctx, userTokenIdentifier);
-  const [playing, backlog, completed, dropped] = await Promise.all([
-    latestEntriesByStatus(ctx, userTokenIdentifier, "playing"),
-    latestEntriesByStatus(ctx, userTokenIdentifier, "backlog"),
-    latestEntriesByStatus(ctx, userTokenIdentifier, "completed"),
-    latestEntriesByStatus(ctx, userTokenIdentifier, "dropped"),
+async function getUserProfile(ctx: QueryCtx, userTokenIdentifier: string, publicProfileId: string) {
+  const statsPromise = getStats(ctx, userTokenIdentifier);
+  const playthroughCountsPromise = getProfilePlaythroughCounts(ctx, userTokenIdentifier);
+  const [stats, playing, backlog, completed, dropped, activity] = await Promise.all([
+    statsPromise,
+    latestGamesByStatus(ctx, userTokenIdentifier, "playing", playthroughCountsPromise),
+    latestGamesByStatus(ctx, userTokenIdentifier, "backlog", playthroughCountsPromise),
+    latestGamesByStatus(ctx, userTokenIdentifier, "completed", playthroughCountsPromise),
+    latestGamesByStatus(ctx, userTokenIdentifier, "dropped", playthroughCountsPromise),
+    getProfileActivity(ctx, publicProfileId),
   ]);
 
   return {
@@ -151,6 +159,7 @@ async function getUserProfile(ctx: QueryCtx, userTokenIdentifier: string) {
       completed,
       dropped,
     },
+    activity,
   };
 }
 
@@ -222,6 +231,121 @@ function statusDelta(status: EntryStatus, from: EntryStatus | null, to: EntrySta
   return (to === status ? 1 : 0) - (from === status ? 1 : 0);
 }
 
+function dayKeyFromTimestamp(timestamp: number) {
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+async function latestEntryForGame(ctx: QueryCtx, userTokenIdentifier: string, igdbId: number) {
+  const entries = await ctx.db
+    .query("gameEntries")
+    .withIndex("by_userTokenIdentifier_and_igdbId_and_updatedAt", (q) =>
+      q.eq("userTokenIdentifier", userTokenIdentifier).eq("igdbId", igdbId),
+    )
+    .order("desc")
+    .take(1);
+
+  return entries[0] ?? null;
+}
+
+async function countPlaythroughsForGame(
+  ctx: QueryCtx | MutationCtx,
+  userTokenIdentifier: string,
+  igdbId: number,
+) {
+  const entries = await ctx.db
+    .query("gameEntries")
+    .withIndex("by_userTokenIdentifier_and_igdbId", (q) =>
+      q.eq("userTokenIdentifier", userTokenIdentifier).eq("igdbId", igdbId),
+    )
+    .collect();
+
+  return entries.length;
+}
+
+async function getProfilePlaythroughCounts(ctx: QueryCtx, userTokenIdentifier: string) {
+  const entries = await ctx.db
+    .query("gameEntries")
+    .withIndex("by_userTokenIdentifier", (q) => q.eq("userTokenIdentifier", userTokenIdentifier))
+    .order("desc")
+    .take(profilePlaythroughCountScanLimit);
+  const countStateByGame = new Map<number, { count: number; maxPlaythroughIndex: number }>();
+
+  for (const entry of entries) {
+    const current = countStateByGame.get(entry.igdbId) ?? {
+      count: 0,
+      maxPlaythroughIndex: 0,
+    };
+    countStateByGame.set(entry.igdbId, {
+      count: current.count + 1,
+      maxPlaythroughIndex: Math.max(current.maxPlaythroughIndex, entry.playthroughIndex ?? 0),
+    });
+  }
+
+  return new Map(
+    Array.from(countStateByGame.entries()).map(([igdbId, state]) => [
+      igdbId,
+      Math.max(state.count, state.maxPlaythroughIndex),
+    ]),
+  );
+}
+
+async function nextPlaythroughIndex(
+  ctx: QueryCtx | MutationCtx,
+  userTokenIdentifier: string,
+  igdbId: number,
+) {
+  return (await countPlaythroughsForGame(ctx, userTokenIdentifier, igdbId)) + 1;
+}
+
+async function recordStatusActivity({
+  ctx,
+  entryId,
+  fromStatus,
+  identity,
+  game,
+  now,
+  playthroughIndex,
+  review,
+  toStatus,
+}: {
+  ctx: MutationCtx;
+  entryId: Id<"gameEntries">;
+  fromStatus: EntryStatus | null;
+  identity: UserIdentity;
+  game: {
+    igdbId: number;
+    slug: string;
+    name: string;
+    coverUrl: string | null;
+  };
+  now: number;
+  playthroughIndex: number;
+  review: string | null;
+  toStatus: EntryStatus;
+}) {
+  if (fromStatus === toStatus) {
+    return;
+  }
+
+  const publicProfileId = await upsertUserProfile(ctx, identity, now);
+
+  await ctx.db.insert("gameEntryActivities", {
+    userTokenIdentifier: identity.tokenIdentifier,
+    publicProfileId,
+    gameEntryId: entryId,
+    igdbId: game.igdbId,
+    slug: game.slug,
+    name: game.name,
+    coverUrl: game.coverUrl,
+    review,
+    playthroughIndex,
+    fromStatus,
+    toStatus,
+    dayKey: dayKeyFromTimestamp(now),
+    createdAt: now,
+  });
+}
+
 async function updateStatsForUpsert(
   ctx: MutationCtx,
   identity: UserIdentity,
@@ -262,21 +386,156 @@ async function updateStatsForUpsert(
   });
 }
 
-async function latestEntriesByStatus(
+async function createPlaythroughEntry(
+  ctx: MutationCtx,
+  identity: UserIdentity,
+  args: {
+    game: {
+      igdbId: number;
+      slug: string;
+      name: string;
+      coverUrl: string | null;
+      releaseYear: string;
+    };
+    status: EntryStatus;
+    rating?: number | null;
+    review?: string | null;
+  },
+) {
+  const userTokenIdentifier = identity.tokenIdentifier;
+  assertGameSnapshot(args.game);
+
+  const now = Date.now();
+  const rating = args.rating === undefined ? null : normalizeRating(args.rating);
+  const review = args.review === undefined ? null : normalizeReview(args.review);
+  const game = {
+    igdbId: args.game.igdbId,
+    slug: args.game.slug.trim(),
+    name: args.game.name.trim(),
+    coverUrl: args.game.coverUrl?.trim() ?? null,
+    releaseYear: args.game.releaseYear.trim(),
+  };
+  const playthroughIndex = await nextPlaythroughIndex(ctx, userTokenIdentifier, game.igdbId);
+
+  await updateStatsForUpsert(ctx, identity, null, args.status, now);
+
+  const entryId = await ctx.db.insert("gameEntries", {
+    userTokenIdentifier,
+    igdbId: game.igdbId,
+    slug: game.slug,
+    name: game.name,
+    coverUrl: game.coverUrl,
+    releaseYear: game.releaseYear,
+    status: args.status,
+    rating,
+    review,
+    playthroughIndex,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await recordStatusActivity({
+    ctx,
+    entryId,
+    fromStatus: null,
+    identity,
+    game,
+    now,
+    playthroughIndex,
+    review,
+    toStatus: args.status,
+  });
+
+  return entryId;
+}
+
+async function latestGamesByStatus(
   ctx: QueryCtx,
   userTokenIdentifier: string,
   status: EntryStatus,
+  playthroughCountsPromise: Promise<Map<number, number>>,
 ) {
-  return await ctx.db
+  const latestByGame = new Map<number, Doc<"gameEntries">>();
+  let scannedEntryCount = 0;
+
+  for await (const entry of ctx.db
     .query("gameEntries")
     .withIndex("by_userTokenIdentifier_and_status_and_updatedAt", (q) =>
       q.eq("userTokenIdentifier", userTokenIdentifier).eq("status", status),
     )
-    .order("desc")
-    .take(shelfLimit);
+    .order("desc")) {
+    scannedEntryCount += 1;
+
+    if (!latestByGame.has(entry.igdbId)) {
+      latestByGame.set(entry.igdbId, entry);
+    }
+
+    if (latestByGame.size >= shelfLimit || scannedEntryCount >= shelfScanMaxEntries) {
+      break;
+    }
+  }
+
+  const playthroughCounts = await playthroughCountsPromise;
+  const result = [];
+
+  for (const entry of latestByGame.values()) {
+    result.push({
+      ...entry,
+      playthroughCount: Math.max(
+        playthroughCounts.get(entry.igdbId) ?? 1,
+        entry.playthroughIndex ?? 1,
+      ),
+      playthroughIndex: entry.playthroughIndex ?? 1,
+    });
+  }
+
+  return result;
 }
 
-export const viewerEntry = query({
+async function getProfileActivity(ctx: QueryCtx, publicProfileId: string) {
+  const activities = await ctx.db
+    .query("gameEntryActivities")
+    .withIndex("by_publicProfileId_and_createdAt", (q) => q.eq("publicProfileId", publicProfileId))
+    .order("desc")
+    .take(profileActivityScanLimit);
+  const countByDay = new Map<string, number>();
+
+  for (const activity of activities) {
+    countByDay.set(activity.dayKey, (countByDay.get(activity.dayKey) ?? 0) + 1);
+  }
+
+  const recent = [];
+
+  for (const activity of activities.slice(0, profileRecentActivityLimit)) {
+    recent.push({
+      id: activity["_id"],
+      dayKey: activity.dayKey,
+      createdAt: activity.createdAt,
+      igdbId: activity.igdbId,
+      slug: activity.slug,
+      name: activity.name,
+      coverUrl: activity.coverUrl,
+      review: activity.review ?? null,
+      fromStatus: activity.fromStatus,
+      toStatus: activity.toStatus,
+      playthroughIndex: activity.playthroughIndex,
+    });
+  }
+
+  return {
+    summary: {
+      recentActiveDays: countByDay.size,
+      recentStatusUpdates: activities.length,
+      recentActivityLimit: profileActivityScanLimit,
+    },
+    heatmap: Array.from(countByDay.entries())
+      .map(([dayKey, count]) => ({ dayKey, count }))
+      .sort((a, b) => a.dayKey.localeCompare(b.dayKey)),
+    recent,
+  };
+}
+
+export const viewerLatestEntry = query({
   args: {
     igdbId: v.number(),
   },
@@ -287,16 +546,86 @@ export const viewerEntry = query({
       return null;
     }
 
-    return await ctx.db
-      .query("gameEntries")
-      .withIndex("by_userTokenIdentifier_and_igdbId", (q) =>
-        q.eq("userTokenIdentifier", userTokenIdentifier).eq("igdbId", args.igdbId),
-      )
-      .unique();
+    return await latestEntryForGame(ctx, userTokenIdentifier, args.igdbId);
   },
 });
 
+export const viewerEntry = viewerLatestEntry;
+
 export const upsert = mutation({
+  args: {
+    entryId: v.optional(v.id("gameEntries")),
+    game: gameSnapshotValidator,
+    status: statusValidator,
+    rating: v.optional(v.union(v.number(), v.null())),
+    review: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const identity = await requireUserIdentity(ctx);
+
+    if (!args.entryId) {
+      return await createPlaythroughEntry(ctx, identity, args);
+    }
+
+    const userTokenIdentifier = identity.tokenIdentifier;
+    assertGameSnapshot(args.game);
+
+    const existing = args.entryId ? await ctx.db.get(args.entryId) : null;
+
+    if (existing && existing.userTokenIdentifier !== userTokenIdentifier) {
+      throw new ConvexError("You can only edit your own playthroughs.");
+    }
+
+    if (!existing) {
+      throw new ConvexError("Playthrough not found.");
+    }
+
+    if (existing.igdbId !== args.game.igdbId) {
+      throw new ConvexError("Playthrough game does not match the requested game.");
+    }
+
+    const now = Date.now();
+    const rating = args.rating === undefined ? existing.rating : normalizeRating(args.rating);
+    const review = args.review === undefined ? existing.review : normalizeReview(args.review);
+    const game = {
+      igdbId: args.game.igdbId,
+      slug: args.game.slug.trim(),
+      name: args.game.name.trim(),
+      coverUrl: args.game.coverUrl?.trim() ?? null,
+      releaseYear: args.game.releaseYear.trim(),
+    };
+    const playthroughIndex = existing.playthroughIndex ?? 1;
+
+    await updateStatsForUpsert(ctx, identity, existing.status, args.status, now);
+
+    await ctx.db.patch(existing["_id"], {
+      slug: game.slug,
+      name: game.name,
+      coverUrl: game.coverUrl,
+      releaseYear: game.releaseYear,
+      status: args.status,
+      rating,
+      review,
+      updatedAt: now,
+    });
+
+    await recordStatusActivity({
+      ctx,
+      entryId: existing["_id"],
+      fromStatus: existing.status,
+      identity,
+      game,
+      now,
+      playthroughIndex,
+      review,
+      toStatus: args.status,
+    });
+
+    return existing["_id"];
+  },
+});
+
+export const createPlaythrough = mutation({
   args: {
     game: gameSnapshotValidator,
     status: statusValidator,
@@ -305,53 +634,7 @@ export const upsert = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await requireUserIdentity(ctx);
-    const userTokenIdentifier = identity.tokenIdentifier;
-    assertGameSnapshot(args.game);
-
-    const existing = await ctx.db
-      .query("gameEntries")
-      .withIndex("by_userTokenIdentifier_and_igdbId", (q) =>
-        q.eq("userTokenIdentifier", userTokenIdentifier).eq("igdbId", args.game.igdbId),
-      )
-      .unique();
-    const now = Date.now();
-    const rating =
-      args.rating === undefined ? (existing?.rating ?? null) : normalizeRating(args.rating);
-    const review =
-      args.review === undefined ? (existing?.review ?? null) : normalizeReview(args.review);
-    const coverUrl = args.game.coverUrl?.trim() ?? null;
-    await updateStatsForUpsert(ctx, identity, existing?.status ?? null, args.status, now);
-
-    if (existing) {
-      const existingId = existing["_id"];
-
-      await ctx.db.patch(existingId, {
-        slug: args.game.slug.trim(),
-        name: args.game.name.trim(),
-        coverUrl,
-        releaseYear: args.game.releaseYear.trim(),
-        status: args.status,
-        rating,
-        review,
-        updatedAt: now,
-      });
-
-      return existingId;
-    }
-
-    return await ctx.db.insert("gameEntries", {
-      userTokenIdentifier,
-      igdbId: args.game.igdbId,
-      slug: args.game.slug.trim(),
-      name: args.game.name.trim(),
-      coverUrl,
-      releaseYear: args.game.releaseYear.trim(),
-      status: args.status,
-      rating,
-      review,
-      createdAt: now,
-      updatedAt: now,
-    });
+    return await createPlaythroughEntry(ctx, identity, args);
   },
 });
 
@@ -365,14 +648,15 @@ export const listViewerProfile = query({
       return null;
     }
 
-    const profile = await getUserProfile(ctx, userTokenIdentifier);
+    const publicProfileId = publicProfileIdFromTokenIdentifier(userTokenIdentifier);
+    const profile = await getUserProfile(ctx, userTokenIdentifier, publicProfileId);
 
     return {
       profile,
       user: {
         name: identity.name ?? "Player",
         image: identity.pictureUrl ?? null,
-        publicProfileId: publicProfileIdFromTokenIdentifier(userTokenIdentifier),
+        publicProfileId,
       },
     };
   },
@@ -451,7 +735,11 @@ export const getPublicProfile = query({
 
     if (publicUserProfile) {
       return {
-        profile: await getUserProfile(ctx, publicUserProfile.userTokenIdentifier),
+        profile: await getUserProfile(
+          ctx,
+          publicUserProfile.userTokenIdentifier,
+          publicUserProfile.publicProfileId,
+        ),
         user: {
           name: publicUserProfile.displayName,
           image: publicUserProfile.imageUrl,
@@ -473,7 +761,7 @@ export const getPublicProfile = query({
     }
 
     return {
-      profile: await getUserProfile(ctx, userTokenIdentifier),
+      profile: await getUserProfile(ctx, userTokenIdentifier, trimmedPublicProfileId),
       user: {
         name: identity.name ?? "Player",
         image: identity.pictureUrl ?? null,
