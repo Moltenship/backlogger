@@ -469,6 +469,10 @@ export const upsert = mutation({
       throw new ConvexError("Playthrough not found.");
     }
 
+    if (existing.igdbId !== args.game.igdbId) {
+      throw new ConvexError("Playthrough game does not match the requested game.");
+    }
+
     const now = Date.now();
     const rating = args.rating === undefined ? existing.rating : normalizeRating(args.rating);
     const review = args.review === undefined ? existing.review : normalizeReview(args.review);
