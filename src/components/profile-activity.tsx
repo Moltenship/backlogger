@@ -18,13 +18,13 @@ const activityDateFormatter = new Intl.DateTimeFormat("en-US", {
 
 export function ProfileActivity({ activity }: { activity: GameEntryProfileActivity }) {
   return (
-    <section className="border-border/70 bg-card rounded-lg border p-4 shadow-sm">
+    <section>
       <div className="mb-4 flex items-center gap-2">
         <CalendarDays className="size-4" aria-hidden="true" />
         <h2 className="text-sm font-semibold">Activity</h2>
       </div>
 
-      <div className="mb-4 grid gap-2 sm:grid-cols-2">
+      <div className="mb-5 grid gap-4 sm:grid-cols-2">
         <ActivityStat label="Recent active days" value={activity.summary.recentActiveDays} />
         <ActivityStat label="Recent status updates" value={activity.summary.recentStatusUpdates} />
       </div>
@@ -45,7 +45,7 @@ export function ProfileActivity({ activity }: { activity: GameEntryProfileActivi
               key={item.id}
               to="/games/$slug/overview"
               params={{ slug: item.slug }}
-              className="hover:bg-accent flex items-center gap-3 rounded-md p-2 transition"
+              className="hover:bg-accent flex items-center gap-3 rounded-md py-2 transition"
             >
               <div className="bg-muted size-10 overflow-hidden rounded-md">
                 {item.coverUrl ? (
@@ -75,7 +75,7 @@ export function ProfileActivity({ activity }: { activity: GameEntryProfileActivi
 
 function ActivityStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="border-border/70 bg-background rounded-md border px-3 py-2">
+    <div className="min-w-0">
       <p className="text-muted-foreground text-xs font-medium">{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
     </div>

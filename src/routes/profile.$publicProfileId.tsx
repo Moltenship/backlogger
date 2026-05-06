@@ -99,7 +99,7 @@ function PublicProfileContent({
 
   return (
     <>
-      <section className="border-border/70 bg-card rounded-lg border p-5 shadow-sm">
+      <section>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
             {user.image ? (
@@ -128,7 +128,7 @@ function PublicProfileContent({
 
         {followError ? <p className="mt-4 text-sm text-red-400">{followError}</p> : null}
 
-        <div className="mt-5 grid gap-2 sm:grid-cols-5">
+        <div className="mt-6 grid gap-4 sm:grid-cols-5">
           <CountBadge label="Total" value={profile.counts.total} />
           {PROFILE_SHELF_STATUSES.map((status) => (
             <CountBadge
@@ -140,11 +140,11 @@ function PublicProfileContent({
         </div>
       </section>
 
-      <div className="mt-5">
+      <div className="mt-8">
         <ProfileActivity activity={profile.activity} />
       </div>
 
-      <div className="mt-5 space-y-5">
+      <div className="mt-8 space-y-5">
         {PROFILE_SHELF_STATUSES.map((status) => (
           <ProfileShelf
             key={status}
