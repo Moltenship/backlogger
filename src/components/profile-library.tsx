@@ -4,6 +4,7 @@ import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   GAME_ENTRY_STATUS_LABELS,
+  getPlaythroughLabel,
   type GameEntryProfile,
   type GameEntryStatus,
 } from "@/lib/game-entry";
@@ -58,6 +59,8 @@ export function ProfileShelf({
 }
 
 function ProfileGameCard({ game }: { game: GameEntryProfile["shelves"][GameEntryStatus][number] }) {
+  const playthroughLabel = getPlaythroughLabel(game.playthroughCount);
+
   return (
     <Link to="/games/$slug/overview" params={{ slug: game.slug }} className="group min-w-0">
       <div className="bg-muted aspect-[3/4] overflow-hidden rounded-md">
@@ -80,6 +83,7 @@ function ProfileGameCard({ game }: { game: GameEntryProfile["shelves"][GameEntry
           <Star className="size-3 fill-current" />
           {formatRating(game.rating)}
         </span>
+        {playthroughLabel ? <span>{playthroughLabel}</span> : null}
       </div>
     </Link>
   );
