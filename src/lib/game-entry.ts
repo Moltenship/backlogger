@@ -21,12 +21,15 @@ export interface GameEntryCard extends GameEntrySnapshot {
   status: GameEntryStatus;
   rating: number | null;
   review: string | null;
+  playthroughCount: number;
+  playthroughIndex: number;
   updatedAt: number;
 }
 
 export interface GameEntryProfile {
   counts: Record<GameEntryStatus | "total", number>;
   shelves: Record<GameEntryStatus, GameEntryCard[]>;
+  activity: GameEntryProfileActivity;
 }
 
 export interface GameEntryActivityBucket {

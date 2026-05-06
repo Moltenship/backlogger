@@ -129,13 +129,14 @@ async function upsertUserProfile(ctx: MutationCtx, identity: UserIdentity, now: 
   return publicProfileId;
 }
 
-async function getUserProfile(ctx: QueryCtx, userTokenIdentifier: string) {
+async function getUserProfile(ctx: QueryCtx, userTokenIdentifier: string, publicProfileId: string) {
   const stats = await getStats(ctx, userTokenIdentifier);
+  const playthroughCounts = new Map<number, Promise<number>>();
   const [playing, backlog, completed, dropped] = await Promise.all([
-    latestEntriesByStatus(ctx, userTokenIdentifier, "playing"),
-    latestEntriesByStatus(ctx, userTokenIdentifier, "backlog"),
-    latestEntriesByStatus(ctx, userTokenIdentifier, "completed"),
-    latestEntriesByStatus(ctx, userTokenIdentifier, "dropped"),
+    latestGamesByStatus(ctx, userTokenIdentifier, "playing", playthroughCounts),
+    latestGamesByStatus(ctx, userTokenIdentifier, "backlog", playthroughCounts),
+    latestGamesByStatus(ctx, userTokenIdentifier, "completed", playthroughCounts),
+    latestGamesByStatus(ctx, userTokenIdentifier, "dropped", playthroughCounts),
   ]);
 
   return {
@@ -152,6 +153,7 @@ async function getUserProfile(ctx: QueryCtx, userTokenIdentifier: string) {
       completed,
       dropped,
     },
+    activity: await getProfileActivity(ctx, publicProfileId),
   };
 }
 
@@ -410,18 +412,90 @@ async function createPlaythroughEntry(
   return entryId;
 }
 
-async function latestEntriesByStatus(
+async function latestGamesByStatus(
   ctx: QueryCtx,
   userTokenIdentifier: string,
   status: EntryStatus,
+  playthroughCounts: Map<number, Promise<number>>,
 ) {
-  return await ctx.db
+  const entries = await ctx.db
     .query("gameEntries")
     .withIndex("by_userTokenIdentifier_and_status_and_updatedAt", (q) =>
       q.eq("userTokenIdentifier", userTokenIdentifier).eq("status", status),
     )
     .order("desc")
-    .take(shelfLimit);
+    .take(60);
+  const latestByGame = new Map<number, (typeof entries)[number]>();
+
+  for (const entry of entries) {
+    if (!latestByGame.has(entry.igdbId)) {
+      latestByGame.set(entry.igdbId, entry);
+    }
+
+    if (latestByGame.size >= shelfLimit) {
+      break;
+    }
+  }
+
+  const result = [];
+
+  for (const entry of latestByGame.values()) {
+    let playthroughCountPromise = playthroughCounts.get(entry.igdbId);
+
+    if (playthroughCountPromise === undefined) {
+      playthroughCountPromise = countPlaythroughsForGame(ctx, userTokenIdentifier, entry.igdbId);
+      playthroughCounts.set(entry.igdbId, playthroughCountPromise);
+    }
+
+    result.push({
+      ...entry,
+      playthroughCount: await playthroughCountPromise,
+      playthroughIndex: entry.playthroughIndex ?? 1,
+    });
+  }
+
+  return result;
+}
+
+async function getProfileActivity(ctx: QueryCtx, publicProfileId: string) {
+  const activities = await ctx.db
+    .query("gameEntryActivities")
+    .withIndex("by_publicProfileId_and_createdAt", (q) => q.eq("publicProfileId", publicProfileId))
+    .order("desc")
+    .take(100);
+  const countByDay = new Map<string, number>();
+
+  for (const activity of activities) {
+    countByDay.set(activity.dayKey, (countByDay.get(activity.dayKey) ?? 0) + 1);
+  }
+
+  const recent = [];
+
+  for (const activity of activities.slice(0, 12)) {
+    recent.push({
+      id: activity["_id"],
+      dayKey: activity.dayKey,
+      createdAt: activity.createdAt,
+      igdbId: activity.igdbId,
+      slug: activity.slug,
+      name: activity.name,
+      coverUrl: activity.coverUrl,
+      fromStatus: activity.fromStatus,
+      toStatus: activity.toStatus,
+      playthroughIndex: activity.playthroughIndex,
+    });
+  }
+
+  return {
+    summary: {
+      activeDays: countByDay.size,
+      totalStatusUpdates: activities.length,
+    },
+    heatmap: Array.from(countByDay.entries())
+      .map(([dayKey, count]) => ({ dayKey, count }))
+      .sort((a, b) => a.dayKey.localeCompare(b.dayKey)),
+    recent,
+  };
 }
 
 export const viewerLatestEntry = query({
@@ -536,14 +610,15 @@ export const listViewerProfile = query({
       return null;
     }
 
-    const profile = await getUserProfile(ctx, userTokenIdentifier);
+    const publicProfileId = publicProfileIdFromTokenIdentifier(userTokenIdentifier);
+    const profile = await getUserProfile(ctx, userTokenIdentifier, publicProfileId);
 
     return {
       profile,
       user: {
         name: identity.name ?? "Player",
         image: identity.pictureUrl ?? null,
-        publicProfileId: publicProfileIdFromTokenIdentifier(userTokenIdentifier),
+        publicProfileId,
       },
     };
   },
@@ -622,7 +697,11 @@ export const getPublicProfile = query({
 
     if (publicUserProfile) {
       return {
-        profile: await getUserProfile(ctx, publicUserProfile.userTokenIdentifier),
+        profile: await getUserProfile(
+          ctx,
+          publicUserProfile.userTokenIdentifier,
+          publicUserProfile.publicProfileId,
+        ),
         user: {
           name: publicUserProfile.displayName,
           image: publicUserProfile.imageUrl,
@@ -644,7 +723,7 @@ export const getPublicProfile = query({
     }
 
     return {
-      profile: await getUserProfile(ctx, userTokenIdentifier),
+      profile: await getUserProfile(ctx, userTokenIdentifier, trimmedPublicProfileId),
       user: {
         name: identity.name ?? "Player",
         image: identity.pictureUrl ?? null,
