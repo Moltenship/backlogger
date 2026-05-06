@@ -23,12 +23,14 @@ export function GameEntryForm({
   isSaving,
   onSignIn,
   onSubmit,
+  submitLabel = "Save",
 }: {
   initialValue: GameEntryFormValue | null;
   isAuthenticated: boolean;
   isSaving: boolean;
   onSignIn: () => void;
   onSubmit: (value: GameEntryFormValue) => void;
+  submitLabel?: string;
 }) {
   const ratingGroupId = useId();
   const reviewId = useId();
@@ -158,7 +160,7 @@ export function GameEntryForm({
 
       <div className="mt-3 flex justify-end">
         <Button type="submit" disabled={isSaving}>
-          {isAuthenticated ? "Save" : "Sign in"}
+          {isAuthenticated ? submitLabel : "Sign in"}
         </Button>
       </div>
     </form>

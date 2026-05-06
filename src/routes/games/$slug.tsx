@@ -68,14 +68,14 @@ import { gameQueryOptions } from "@/lib/igdb-query";
 import { api } from "../../../convex/_generated/api";
 import { Route as RootRoute } from "../__root";
 
-type ViewerEntry = FunctionReturnType<typeof api.gameEntries.viewerEntry>;
+type ViewerEntry = FunctionReturnType<typeof api.gameEntries.viewerLatestEntry>;
 
 export const Route = createFileRoute("/games/$slug")({
   loader: async ({ context, params }) => {
     const data = await context.queryClient.ensureQueryData(gameQueryOptions(params.slug));
     const viewerEntry = data.game
       ? await context.queryClient.ensureQueryData(
-          convexQuery(api.gameEntries.viewerEntry, { igdbId: data.game.id }),
+          convexQuery(api.gameEntries.viewerLatestEntry, { igdbId: data.game.id }),
         )
       : null;
 
@@ -147,12 +147,14 @@ function GameDetail({
   const { isAuthenticated } = useRouteContext({ from: RootRoute.id });
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isEntryDialogOpen, setIsEntryDialogOpen] = useState(false);
+  const [entryDialogMode, setEntryDialogMode] = useState<"edit" | "replay">("edit");
   const [draftStatus, setDraftStatus] = useState<GameEntryStatus>("backlog");
   const { data: liveViewerEntry, isPending: isEntryLoading } = useQuery(
-    convexQuery(api.gameEntries.viewerEntry, { igdbId: game.id }),
+    convexQuery(api.gameEntries.viewerLatestEntry, { igdbId: game.id }),
   );
   const viewerEntry = liveViewerEntry ?? initialViewerEntry;
   const upsertGameEntry = useMutation(api.gameEntries.upsert);
+  const createPlaythrough = useMutation(api.gameEntries.createPlaythrough);
   const [isSavingEntry, setIsSavingEntry] = useState(false);
   const isEntryFormLoading = isEntryLoading;
   const currentStatus = viewerEntry?.status ?? draftStatus;
@@ -175,7 +177,15 @@ function GameDetail({
 
   function openEntryDialog(status: GameEntryStatus) {
     setSaveError(null);
+    setEntryDialogMode("edit");
     setDraftStatus(status);
+    setIsEntryDialogOpen(true);
+  }
+
+  function openReplayDialog() {
+    setSaveError(null);
+    setEntryDialogMode("replay");
+    setDraftStatus("playing");
     setIsEntryDialogOpen(true);
   }
 
@@ -200,18 +210,34 @@ function GameDetail({
     setSaveError(null);
 
     try {
-      await upsertGameEntry({
-        game: {
-          igdbId: game.id,
-          slug: game.slug,
-          name: game.name,
-          coverUrl: game.coverUrl,
-          releaseYear: game.releaseYear,
-        },
-        status: value.status,
-        rating: value.rating,
-        review: value.review,
-      });
+      if (entryDialogMode === "replay") {
+        await createPlaythrough({
+          game: {
+            igdbId: game.id,
+            slug: game.slug,
+            name: game.name,
+            coverUrl: game.coverUrl,
+            releaseYear: game.releaseYear,
+          },
+          status: value.status,
+          rating: value.rating,
+          review: value.review,
+        });
+      } else {
+        await upsertGameEntry({
+          entryId: viewerEntry?._id,
+          game: {
+            igdbId: game.id,
+            slug: game.slug,
+            name: game.name,
+            coverUrl: game.coverUrl,
+            releaseYear: game.releaseYear,
+          },
+          status: value.status,
+          rating: value.rating,
+          review: value.review,
+        });
+      }
       setIsEntryDialogOpen(false);
     } catch (error) {
       if (isAuthRequiredError(error)) {
@@ -254,7 +280,7 @@ function GameDetail({
             {isEntryFormLoading ? (
               <GameEntryActionLoading />
             ) : (
-              <div className="mt-6">
+              <div className="mt-6 flex flex-wrap items-center gap-2">
                 <GameEntryStatusButton
                   status={currentStatus}
                   onOpen={() => {
@@ -264,6 +290,11 @@ function GameDetail({
                     openEntryDialog(status);
                   }}
                 />
+                {viewerEntry ? (
+                  <Button variant="outline" onClick={openReplayDialog}>
+                    Log replay
+                  </Button>
+                ) : null}
               </div>
             )}
             {saveError ? (
@@ -274,9 +305,15 @@ function GameDetail({
             <Dialog open={isEntryDialogOpen} onOpenChange={setIsEntryDialogOpen}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{GAME_ENTRY_STATUS_LABELS[draftStatus]}</DialogTitle>
+                  <DialogTitle>
+                    {entryDialogMode === "replay"
+                      ? "Log another playthrough"
+                      : GAME_ENTRY_STATUS_LABELS[draftStatus]}
+                  </DialogTitle>
                   <DialogDescription>
-                    Set your status, optional rating, and optional review for {game.name}.
+                    {entryDialogMode === "replay"
+                      ? `Create a new playthrough for ${game.name} with its own status, rating, and review.`
+                      : `Set your status, optional rating, and optional review for ${game.name}.`}
                   </DialogDescription>
                 </DialogHeader>
                 <GameEntryForm
@@ -285,6 +322,9 @@ function GameDetail({
                   isSaving={isSavingEntry}
                   onSignIn={signInWithTwitch}
                   onSubmit={saveEntry}
+                  submitLabel={
+                    entryDialogMode === "replay" ? "Log playthrough" : "Save playthrough"
+                  }
                 />
               </DialogContent>
             </Dialog>
