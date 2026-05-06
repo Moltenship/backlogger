@@ -305,6 +305,7 @@ async function recordStatusActivity({
   game,
   now,
   playthroughIndex,
+  review,
   toStatus,
 }: {
   ctx: MutationCtx;
@@ -319,6 +320,7 @@ async function recordStatusActivity({
   };
   now: number;
   playthroughIndex: number;
+  review: string | null;
   toStatus: EntryStatus;
 }) {
   if (fromStatus === toStatus) {
@@ -335,6 +337,7 @@ async function recordStatusActivity({
     slug: game.slug,
     name: game.name,
     coverUrl: game.coverUrl,
+    review,
     playthroughIndex,
     fromStatus,
     toStatus,
@@ -439,6 +442,7 @@ async function createPlaythroughEntry(
     game,
     now,
     playthroughIndex,
+    review,
     toStatus: args.status,
   });
 
@@ -511,6 +515,7 @@ async function getProfileActivity(ctx: QueryCtx, publicProfileId: string) {
       slug: activity.slug,
       name: activity.name,
       coverUrl: activity.coverUrl,
+      review: activity.review ?? null,
       fromStatus: activity.fromStatus,
       toStatus: activity.toStatus,
       playthroughIndex: activity.playthroughIndex,
@@ -612,6 +617,7 @@ export const upsert = mutation({
       game,
       now,
       playthroughIndex,
+      review,
       toStatus: args.status,
     });
 

@@ -66,6 +66,7 @@ export default defineSchema({
     slug: v.string(),
     name: v.string(),
     coverUrl: v.union(v.string(), v.null()),
+    review: v.optional(v.union(v.string(), v.null())),
     playthroughIndex: v.number(),
     fromStatus: v.union(
       v.literal("backlog"),

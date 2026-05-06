@@ -45,6 +45,7 @@ export interface GameEntryActivityItem {
   slug: string;
   name: string;
   coverUrl: string | null;
+  review: string | null;
   fromStatus: GameEntryStatus | null;
   toStatus: GameEntryStatus;
   playthroughIndex: number;

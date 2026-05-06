@@ -54,6 +54,11 @@ export function ProfileActivity({ activity }: { activity: GameEntryProfileActivi
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{formatActivityMessage(item)}</p>
+                {item.review ? (
+                  <p className="text-muted-foreground mt-1 line-clamp-2 text-xs leading-5">
+                    {item.review}
+                  </p>
+                ) : null}
                 <time className="text-muted-foreground text-xs" dateTime={item.dayKey}>
                   {formatDayLabel(item.dayKey)}
                 </time>
