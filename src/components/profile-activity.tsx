@@ -45,7 +45,7 @@ export function ProfileActivity({ activity }: { activity: GameEntryProfileActivi
               key={item.id}
               to="/games/$slug/overview"
               params={{ slug: item.slug }}
-              className="hover:bg-accent flex items-center gap-3 rounded-md p-2 transition"
+              className="hover:bg-accent -mx-2 flex items-center gap-3 rounded-md px-2 py-2 transition"
             >
               <div className="bg-muted size-10 overflow-hidden rounded-md">
                 {item.coverUrl ? (
