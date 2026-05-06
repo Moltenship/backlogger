@@ -85,10 +85,7 @@ export default defineSchema({
   })
     .index("by_userTokenIdentifier_and_dayKey", ["userTokenIdentifier", "dayKey"])
     .index("by_publicProfileId_and_dayKey", ["publicProfileId", "dayKey"])
-    .index("by_publicProfileId_and_createdAt", [
-      "publicProfileId",
-      "createdAt",
-    ]),
+    .index("by_publicProfileId_and_createdAt", ["publicProfileId", "createdAt"]),
   gameEntryStats: defineTable({
     userTokenIdentifier: v.string(),
     publicProfileId: v.optional(v.string()),
