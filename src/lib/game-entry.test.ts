@@ -2,7 +2,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatActivityMessage,
+  formatDayKey,
   GAME_ENTRY_STATUSES,
+  getPlaythroughLabel,
   isGameEntryStatus,
   isValidStarRating,
   normalizeReview,
@@ -39,5 +42,37 @@ describe("game entry helpers", () => {
     expect(normalizeReview(null)).toBeNull();
     expect(normalizeReview("   ")).toBeNull();
     expect(normalizeReview("  Great pacing.  ")).toBe("Great pacing.");
+  });
+
+  it("formats UTC day keys for activity buckets", () => {
+    expect.assertions(2);
+
+    expect(formatDayKey(Date.UTC(2026, 0, 2, 23, 59))).toBe("2026-01-02");
+    expect(formatDayKey(Date.UTC(2026, 11, 31, 0, 1))).toBe("2026-12-31");
+  });
+
+  it("formats playthrough count labels", () => {
+    expect.assertions(3);
+
+    expect(getPlaythroughLabel(0)).toBeNull();
+    expect(getPlaythroughLabel(1)).toBeNull();
+    expect(getPlaythroughLabel(2)).toBe("2 playthroughs");
+  });
+
+  it("formats profile status activity messages", () => {
+    expect.assertions(4);
+
+    expect(formatActivityMessage({ name: "Hades", toStatus: "playing", playthroughIndex: 1 })).toBe(
+      "Started playing Hades",
+    );
+    expect(formatActivityMessage({ name: "Hades", toStatus: "playing", playthroughIndex: 2 })).toBe(
+      "Started replaying Hades",
+    );
+    expect(
+      formatActivityMessage({ name: "Hades", toStatus: "completed", playthroughIndex: 2 }),
+    ).toBe("Completed a replay of Hades");
+    expect(formatActivityMessage({ name: "Hades", toStatus: "backlog", playthroughIndex: 1 })).toBe(
+      "Moved Hades to Backlog",
+    );
   });
 });
