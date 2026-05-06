@@ -160,8 +160,8 @@ function GameDetail({
   const currentStatus = viewerEntry?.status ?? draftStatus;
   const entryDialogValue: GameEntryFormValue = {
     status: draftStatus,
-    rating: viewerEntry?.rating ?? null,
-    review: viewerEntry?.review ?? null,
+    rating: entryDialogMode === "replay" ? null : (viewerEntry?.rating ?? null),
+    review: entryDialogMode === "replay" ? null : (viewerEntry?.review ?? null),
   };
   const heroStyle = game.heroUrl
     ? {
@@ -225,7 +225,7 @@ function GameDetail({
         });
       } else {
         await upsertGameEntry({
-          entryId: viewerEntry?._id,
+          entryId: viewerEntry?.["_id"],
           game: {
             igdbId: game.id,
             slug: game.slug,
