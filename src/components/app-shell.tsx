@@ -5,7 +5,6 @@ import { useMutation } from "convex/react";
 import { Gamepad2, Home, LogOut, PanelLeftClose, PanelLeftOpen, UserRound } from "lucide-react";
 import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
-import { DevAdminLoginButton } from "@/components/dev-admin-login-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { SIDEBAR_COOKIE_NAME } from "@/lib/ui-preferences";
@@ -176,7 +175,8 @@ function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
   const syncViewerProfile = useMutation(api.gameEntries.syncViewerProfile);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const user = liveCurrentUser ?? initialCurrentUser;
-  const initials = getInitials(user?.name ?? "Player");
+  const username = getUsername(user);
+  const initials = getInitials(username ?? user?.name ?? "Player");
 
   useEffect(() => {
     if (!user) {
@@ -187,18 +187,6 @@ function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
       console.error(error);
     });
   }, [syncViewerProfile, user]);
-
-  async function signInWithTwitch() {
-    setIsSubmitting(true);
-
-    try {
-      await authClient.signIn.social({
-        provider: "twitch",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
 
   async function signOut() {
     setIsSubmitting(true);
@@ -219,53 +207,32 @@ function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
   if (!user) {
     if (isCollapsed) {
       return (
-        <Button
-          className="mt-auto"
-          size="icon"
-          variant="outline"
-          onClick={signInWithTwitch}
-          disabled={isSubmitting}
-          aria-label="Sign in with Twitch"
+        <Link
+          to="/sign-in"
+          className={buttonVariants({ className: "mt-auto", size: "icon", variant: "outline" })}
+          aria-label="Sign in"
         >
-          <UserRound className="size-4" />
-        </Button>
+          <UserRound data-icon="inline-start" />
+        </Link>
       );
     }
 
     return (
-      <div className="border-border/70 mt-auto rounded-lg border p-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-muted grid size-10 place-items-center rounded-full">
-            <UserRound className="text-muted-foreground size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium">Guest</p>
-            <p className="text-muted-foreground text-xs">Sign in to track games</p>
-          </div>
-        </div>
-        <Button
-          className="mt-4 w-full"
-          size="sm"
-          onClick={signInWithTwitch}
-          disabled={isSubmitting}
-        >
-          Sign in with Twitch
-        </Button>
-        <DevAdminLoginButton className="mt-2 w-full" />
-      </div>
+      <Link
+        to="/sign-in"
+        className={buttonVariants({ className: "mt-auto w-full", variant: "outline" })}
+      >
+        Sign in
+      </Link>
     );
   }
 
   if (isCollapsed) {
     return (
       <Link to="/profile" className="mt-auto" aria-label="Profile">
-        {user.image ? (
-          <img src={user.image} alt="" className="size-10 rounded-full object-cover" />
-        ) : (
-          <div className="bg-primary text-primary-foreground grid size-10 place-items-center rounded-full text-sm font-medium">
-            {initials}
-          </div>
-        )}
+        <div className="bg-primary text-primary-foreground grid size-10 place-items-center rounded-full text-sm font-medium">
+          {initials}
+        </div>
       </Link>
     );
   }
@@ -273,16 +240,12 @@ function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
   return (
     <div className="border-border/70 mt-auto rounded-lg border p-4">
       <div className="flex items-center gap-3">
-        {user.image ? (
-          <img src={user.image} alt="" className="size-10 rounded-full object-cover" />
-        ) : (
-          <div className="bg-primary text-primary-foreground grid size-10 place-items-center rounded-full text-sm font-medium">
-            {initials}
-          </div>
-        )}
+        <div className="bg-primary text-primary-foreground grid size-10 place-items-center rounded-full text-sm font-medium">
+          {initials}
+        </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{user.name ?? "Player"}</p>
-          <p className="text-muted-foreground truncate text-xs">Twitch account</p>
+          <p className="truncate text-sm font-medium">{username ?? user.name ?? "Player"}</p>
+          <p className="text-muted-foreground truncate text-xs">Account</p>
         </div>
       </div>
       <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
@@ -304,12 +267,16 @@ function SidebarProfileCard({ isCollapsed }: { isCollapsed: boolean }) {
 }
 
 function getInitials(value: string) {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
+  return value.trim().slice(0, 2).toUpperCase();
+}
+
+function getUsername(user: unknown) {
+  if (!user || typeof user !== "object") {
+    return null;
+  }
+
+  const username = (user as { username?: unknown }).username;
+  return typeof username === "string" && username.trim().length > 0 ? username : null;
 }
 
 function NavLink({

@@ -55,7 +55,6 @@ import { Steam } from "@/components/ui/svgs/steam";
 import { Windows } from "@/components/ui/svgs/windows";
 import { Xbox } from "@/components/ui/svgs/xbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { authClient } from "@/lib/auth-client";
 import {
   GAME_ENTRY_STATUS_LABELS,
   GAME_ENTRY_STATUSES,
@@ -189,20 +188,15 @@ function GameDetail({
     setIsEntryDialogOpen(true);
   }
 
-  async function signInWithTwitch() {
+  async function goToSignIn() {
     setSaveError(null);
-
-    try {
-      await authClient.signIn.social({ provider: "twitch" });
-    } catch (error) {
-      setSaveError(`Could not start Twitch sign in. ${getErrorMessage(error)}`);
-    }
+    await navigate({ to: "/sign-in" });
   }
 
   async function saveEntry(value: GameEntryFormValue) {
     if (!isAuthenticated) {
       setIsEntryDialogOpen(false);
-      setSaveError("Sign in with Twitch before saving games to your library.");
+      setSaveError("Sign in before saving games to your library.");
       return;
     }
 
@@ -320,7 +314,7 @@ function GameDetail({
                   initialValue={entryDialogValue}
                   isAuthenticated={isAuthenticated}
                   isSaving={isSavingEntry}
-                  onSignIn={signInWithTwitch}
+                  onSignIn={goToSignIn}
                   onSubmit={saveEntry}
                   submitLabel={
                     entryDialogMode === "replay" ? "Log playthrough" : "Save playthrough"
@@ -706,7 +700,7 @@ function getErrorMessage(error: unknown) {
 
 function getSaveErrorMessage(error: unknown) {
   if (isAuthRequiredError(error)) {
-    return "Could not save your library entry because the game library is not authenticated. Refresh the page or sign in with Twitch again.";
+    return "Could not save your library entry because the game library is not authenticated. Refresh the page or sign in again.";
   }
 
   return `Could not save your library entry. ${getErrorMessage(error)}`;

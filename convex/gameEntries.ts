@@ -4,7 +4,7 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 
-const publicProfilePrefix = "u";
+const usernameMinLength = 3;
 const statusValidator = v.union(
   v.literal("backlog"),
   v.literal("playing"),
@@ -108,15 +108,15 @@ async function getPublicUserProfile(ctx: QueryCtx | MutationCtx, publicProfileId
 
 async function upsertUserProfile(ctx: MutationCtx, identity: UserIdentity, now: number) {
   const userTokenIdentifier = identity.tokenIdentifier;
-  const publicProfileId = publicProfileIdFromTokenIdentifier(userTokenIdentifier);
+  const publicProfileId = publicProfileIdFromIdentity(identity);
   const existingProfile = await ctx.db
     .query("userProfiles")
     .withIndex("by_userTokenIdentifier", (q) => q.eq("userTokenIdentifier", userTokenIdentifier))
     .unique();
   const profile = {
     publicProfileId,
-    displayName: identity.name ?? "Player",
-    imageUrl: identity.pictureUrl ?? null,
+    displayName: displayNameFromIdentity(identity),
+    imageUrl: null,
     updatedAt: now,
   };
 
@@ -213,18 +213,30 @@ async function getViewerRelationship(
   return "none";
 }
 
-function publicProfileIdFromTokenIdentifier(userTokenIdentifier: string) {
-  return `${publicProfilePrefix}_${hashString(userTokenIdentifier)}`;
+function usernameFromIdentity(identity: UserIdentity) {
+  const user = identity as UserIdentity & {
+    username?: string | null;
+    preferredUsername?: string | null;
+  };
+  return user.username ?? user.preferredUsername ?? null;
 }
 
-function hashString(value: string) {
-  let hash = 17;
+function publicProfileIdFromIdentity(identity: UserIdentity) {
+  const username = usernameFromIdentity(identity);
 
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) % Number.MAX_SAFE_INTEGER;
+  if (!username || username.trim().length < usernameMinLength) {
+    throw new ConvexError("Username is required.");
   }
 
-  return Math.abs(hash).toString(36);
+  return normalizeUsername(username);
+}
+
+function displayNameFromIdentity(identity: UserIdentity) {
+  return usernameFromIdentity(identity) ?? identity.name ?? "Player";
+}
+
+function normalizeUsername(username: string) {
+  return username.trim().toLowerCase();
 }
 
 function statusDelta(status: EntryStatus, from: EntryStatus | null, to: EntryStatus) {
@@ -369,8 +381,8 @@ async function updateStatsForUpsert(
     playing: baseStats.playing + statusDelta("playing", previousStatus, nextStatus),
     completed: baseStats.completed + statusDelta("completed", previousStatus, nextStatus),
     dropped: baseStats.dropped + statusDelta("dropped", previousStatus, nextStatus),
-    displayName: identity.name ?? "Player",
-    imageUrl: identity.pictureUrl ?? null,
+    displayName: displayNameFromIdentity(identity),
+    imageUrl: null,
     publicProfileId,
     updatedAt: now,
   };
@@ -648,14 +660,14 @@ export const listViewerProfile = query({
       return null;
     }
 
-    const publicProfileId = publicProfileIdFromTokenIdentifier(userTokenIdentifier);
+    const publicProfileId = publicProfileIdFromIdentity(identity);
     const profile = await getUserProfile(ctx, userTokenIdentifier, publicProfileId);
 
     return {
       profile,
       user: {
-        name: identity.name ?? "Player",
-        image: identity.pictureUrl ?? null,
+        name: displayNameFromIdentity(identity),
+        image: null,
         publicProfileId,
       },
     };
@@ -679,7 +691,7 @@ export const followPublicProfile = mutation({
     const followerTokenIdentifier = identity.tokenIdentifier;
     const trimmedPublicProfileId = args.publicProfileId.trim();
 
-    if (!trimmedPublicProfileId.startsWith(`${publicProfilePrefix}_`)) {
+    if (trimmedPublicProfileId.length < usernameMinLength) {
       throw new ConvexError("A valid public profile id is required.");
     }
 
@@ -725,9 +737,9 @@ export const getPublicProfile = query({
     publicProfileId: v.string(),
   },
   handler: async (ctx, args) => {
-    const trimmedPublicProfileId = args.publicProfileId.trim();
+    const trimmedPublicProfileId = normalizeUsername(args.publicProfileId);
 
-    if (!trimmedPublicProfileId.startsWith(`${publicProfilePrefix}_`)) {
+    if (trimmedPublicProfileId.length < usernameMinLength) {
       return null;
     }
 
@@ -755,7 +767,7 @@ export const getPublicProfile = query({
     if (
       !identity ||
       !userTokenIdentifier ||
-      publicProfileIdFromTokenIdentifier(userTokenIdentifier) !== trimmedPublicProfileId
+      publicProfileIdFromIdentity(identity) !== trimmedPublicProfileId
     ) {
       return null;
     }
@@ -763,8 +775,8 @@ export const getPublicProfile = query({
     return {
       profile: await getUserProfile(ctx, userTokenIdentifier, trimmedPublicProfileId),
       user: {
-        name: identity.name ?? "Player",
-        image: identity.pictureUrl ?? null,
+        name: displayNameFromIdentity(identity),
+        image: null,
         publicProfileId: trimmedPublicProfileId,
       },
       viewerRelationship: "self" as const,
