@@ -21,7 +21,6 @@ const gameSnapshotValidator = v.object({
 });
 
 const shelfLimit = 12;
-const shelfScanBatchSize = 60;
 const shelfScanMaxEntries = shelfLimit * 25;
 const profilePlaythroughCountScanLimit = 1_000;
 const profileActivityScanLimit = 100;
@@ -453,35 +452,22 @@ async function latestGamesByStatus(
   playthroughCountsPromise: Promise<Map<number, number>>,
 ) {
   const latestByGame = new Map<number, Doc<"gameEntries">>();
-  let cursor: string | null = null;
-  let isDone = false;
   let scannedEntryCount = 0;
 
-  while (!isDone && latestByGame.size < shelfLimit && scannedEntryCount < shelfScanMaxEntries) {
-    const remainingEntryLimit = shelfScanMaxEntries - scannedEntryCount;
-    const pageResult = await ctx.db
-      .query("gameEntries")
-      .withIndex("by_userTokenIdentifier_and_status_and_updatedAt", (q) =>
-        q.eq("userTokenIdentifier", userTokenIdentifier).eq("status", status),
-      )
-      .order("desc")
-      .paginate({
-        cursor,
-        numItems: Math.min(shelfScanBatchSize, remainingEntryLimit),
-      });
+  for await (const entry of ctx.db
+    .query("gameEntries")
+    .withIndex("by_userTokenIdentifier_and_status_and_updatedAt", (q) =>
+      q.eq("userTokenIdentifier", userTokenIdentifier).eq("status", status),
+    )
+    .order("desc")) {
+    scannedEntryCount += 1;
 
-    scannedEntryCount += pageResult.page.length;
-    cursor = pageResult.continueCursor;
-    isDone = pageResult.isDone;
+    if (!latestByGame.has(entry.igdbId)) {
+      latestByGame.set(entry.igdbId, entry);
+    }
 
-    for (const entry of pageResult.page) {
-      if (!latestByGame.has(entry.igdbId)) {
-        latestByGame.set(entry.igdbId, entry);
-      }
-
-      if (latestByGame.size >= shelfLimit) {
-        break;
-      }
+    if (latestByGame.size >= shelfLimit || scannedEntryCount >= shelfScanMaxEntries) {
+      break;
     }
   }
 
