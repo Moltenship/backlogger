@@ -51,8 +51,9 @@ export interface GameEntryActivityItem {
 }
 
 export interface GameEntryActivitySummary {
-  activeDays: number;
-  totalStatusUpdates: number;
+  recentActiveDays: number;
+  recentStatusUpdates: number;
+  recentActivityLimit: number;
 }
 
 export interface GameEntryProfileActivity {

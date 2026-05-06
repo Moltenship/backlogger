@@ -1,7 +1,7 @@
 import type { UserIdentity } from "convex/server";
 import { ConvexError, v } from "convex/values";
 
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 
 const publicProfilePrefix = "u";
@@ -21,6 +21,11 @@ const gameSnapshotValidator = v.object({
 });
 
 const shelfLimit = 12;
+const shelfScanBatchSize = 60;
+const shelfScanMaxEntries = shelfLimit * 25;
+const profilePlaythroughCountScanLimit = 1_000;
+const profileActivityScanLimit = 100;
+const profileRecentActivityLimit = 12;
 
 type EntryStatus = "backlog" | "playing" | "completed" | "dropped";
 
@@ -130,13 +135,15 @@ async function upsertUserProfile(ctx: MutationCtx, identity: UserIdentity, now: 
 }
 
 async function getUserProfile(ctx: QueryCtx, userTokenIdentifier: string, publicProfileId: string) {
-  const stats = await getStats(ctx, userTokenIdentifier);
-  const playthroughCounts = new Map<number, Promise<number>>();
-  const [playing, backlog, completed, dropped] = await Promise.all([
-    latestGamesByStatus(ctx, userTokenIdentifier, "playing", playthroughCounts),
-    latestGamesByStatus(ctx, userTokenIdentifier, "backlog", playthroughCounts),
-    latestGamesByStatus(ctx, userTokenIdentifier, "completed", playthroughCounts),
-    latestGamesByStatus(ctx, userTokenIdentifier, "dropped", playthroughCounts),
+  const statsPromise = getStats(ctx, userTokenIdentifier);
+  const playthroughCountsPromise = getProfilePlaythroughCounts(ctx, userTokenIdentifier);
+  const [stats, playing, backlog, completed, dropped, activity] = await Promise.all([
+    statsPromise,
+    latestGamesByStatus(ctx, userTokenIdentifier, "playing", playthroughCountsPromise),
+    latestGamesByStatus(ctx, userTokenIdentifier, "backlog", playthroughCountsPromise),
+    latestGamesByStatus(ctx, userTokenIdentifier, "completed", playthroughCountsPromise),
+    latestGamesByStatus(ctx, userTokenIdentifier, "dropped", playthroughCountsPromise),
+    getProfileActivity(ctx, publicProfileId),
   ]);
 
   return {
@@ -153,7 +160,7 @@ async function getUserProfile(ctx: QueryCtx, userTokenIdentifier: string, public
       completed,
       dropped,
     },
-    activity: await getProfileActivity(ctx, publicProfileId),
+    activity,
   };
 }
 
@@ -254,6 +261,33 @@ async function countPlaythroughsForGame(
     .collect();
 
   return entries.length;
+}
+
+async function getProfilePlaythroughCounts(ctx: QueryCtx, userTokenIdentifier: string) {
+  const entries = await ctx.db
+    .query("gameEntries")
+    .withIndex("by_userTokenIdentifier", (q) => q.eq("userTokenIdentifier", userTokenIdentifier))
+    .order("desc")
+    .take(profilePlaythroughCountScanLimit);
+  const countStateByGame = new Map<number, { count: number; maxPlaythroughIndex: number }>();
+
+  for (const entry of entries) {
+    const current = countStateByGame.get(entry.igdbId) ?? {
+      count: 0,
+      maxPlaythroughIndex: 0,
+    };
+    countStateByGame.set(entry.igdbId, {
+      count: current.count + 1,
+      maxPlaythroughIndex: Math.max(current.maxPlaythroughIndex, entry.playthroughIndex ?? 0),
+    });
+  }
+
+  return new Map(
+    Array.from(countStateByGame.entries()).map(([igdbId, state]) => [
+      igdbId,
+      Math.max(state.count, state.maxPlaythroughIndex),
+    ]),
+  );
 }
 
 async function nextPlaythroughIndex(
@@ -416,40 +450,51 @@ async function latestGamesByStatus(
   ctx: QueryCtx,
   userTokenIdentifier: string,
   status: EntryStatus,
-  playthroughCounts: Map<number, Promise<number>>,
+  playthroughCountsPromise: Promise<Map<number, number>>,
 ) {
-  const entries = await ctx.db
-    .query("gameEntries")
-    .withIndex("by_userTokenIdentifier_and_status_and_updatedAt", (q) =>
-      q.eq("userTokenIdentifier", userTokenIdentifier).eq("status", status),
-    )
-    .order("desc")
-    .take(60);
-  const latestByGame = new Map<number, (typeof entries)[number]>();
+  const latestByGame = new Map<number, Doc<"gameEntries">>();
+  let cursor: string | null = null;
+  let isDone = false;
+  let scannedEntryCount = 0;
 
-  for (const entry of entries) {
-    if (!latestByGame.has(entry.igdbId)) {
-      latestByGame.set(entry.igdbId, entry);
-    }
+  while (!isDone && latestByGame.size < shelfLimit && scannedEntryCount < shelfScanMaxEntries) {
+    const remainingEntryLimit = shelfScanMaxEntries - scannedEntryCount;
+    const pageResult = await ctx.db
+      .query("gameEntries")
+      .withIndex("by_userTokenIdentifier_and_status_and_updatedAt", (q) =>
+        q.eq("userTokenIdentifier", userTokenIdentifier).eq("status", status),
+      )
+      .order("desc")
+      .paginate({
+        cursor,
+        numItems: Math.min(shelfScanBatchSize, remainingEntryLimit),
+      });
 
-    if (latestByGame.size >= shelfLimit) {
-      break;
+    scannedEntryCount += pageResult.page.length;
+    cursor = pageResult.continueCursor;
+    isDone = pageResult.isDone;
+
+    for (const entry of pageResult.page) {
+      if (!latestByGame.has(entry.igdbId)) {
+        latestByGame.set(entry.igdbId, entry);
+      }
+
+      if (latestByGame.size >= shelfLimit) {
+        break;
+      }
     }
   }
 
+  const playthroughCounts = await playthroughCountsPromise;
   const result = [];
 
   for (const entry of latestByGame.values()) {
-    let playthroughCountPromise = playthroughCounts.get(entry.igdbId);
-
-    if (playthroughCountPromise === undefined) {
-      playthroughCountPromise = countPlaythroughsForGame(ctx, userTokenIdentifier, entry.igdbId);
-      playthroughCounts.set(entry.igdbId, playthroughCountPromise);
-    }
-
     result.push({
       ...entry,
-      playthroughCount: await playthroughCountPromise,
+      playthroughCount: Math.max(
+        playthroughCounts.get(entry.igdbId) ?? 1,
+        entry.playthroughIndex ?? 1,
+      ),
       playthroughIndex: entry.playthroughIndex ?? 1,
     });
   }
@@ -462,7 +507,7 @@ async function getProfileActivity(ctx: QueryCtx, publicProfileId: string) {
     .query("gameEntryActivities")
     .withIndex("by_publicProfileId_and_createdAt", (q) => q.eq("publicProfileId", publicProfileId))
     .order("desc")
-    .take(100);
+    .take(profileActivityScanLimit);
   const countByDay = new Map<string, number>();
 
   for (const activity of activities) {
@@ -471,7 +516,7 @@ async function getProfileActivity(ctx: QueryCtx, publicProfileId: string) {
 
   const recent = [];
 
-  for (const activity of activities.slice(0, 12)) {
+  for (const activity of activities.slice(0, profileRecentActivityLimit)) {
     recent.push({
       id: activity["_id"],
       dayKey: activity.dayKey,
@@ -488,8 +533,9 @@ async function getProfileActivity(ctx: QueryCtx, publicProfileId: string) {
 
   return {
     summary: {
-      activeDays: countByDay.size,
-      totalStatusUpdates: activities.length,
+      recentActiveDays: countByDay.size,
+      recentStatusUpdates: activities.length,
+      recentActivityLimit: profileActivityScanLimit,
     },
     heatmap: Array.from(countByDay.entries())
       .map(([dayKey, count]) => ({ dayKey, count }))
