@@ -1,11 +1,10 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { createFileRoute, redirect, useRouteContext } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useRouteContext } from "@tanstack/react-router";
 import { UserRound } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { DevAdminLoginButton } from "@/components/dev-admin-login-button";
-import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
+import { buttonVariants } from "@/components/ui/button";
 import { Route as RootRoute } from "@/routes/__root";
 
 import { api } from "../../../convex/_generated/api";
@@ -29,10 +28,6 @@ export const Route = createFileRoute("/profile/")({
 function ProfileIndexPage() {
   const { isSidebarCollapsed } = useRouteContext({ from: RootRoute.id });
 
-  async function signInWithTwitch() {
-    await authClient.signIn.social({ provider: "twitch" });
-  }
-
   return (
     <AppShell initialSidebarCollapsed={isSidebarCollapsed}>
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
@@ -52,7 +47,9 @@ function ProfileIndexPage() {
           </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Button onClick={signInWithTwitch}>Sign in with Twitch</Button>
+            <Link to="/sign-in" className={buttonVariants()}>
+              Sign in
+            </Link>
             <DevAdminLoginButton size="default" />
           </div>
         </section>

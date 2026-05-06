@@ -9,7 +9,6 @@ import { AppShell } from "@/components/app-shell";
 import { ProfileActivity } from "@/components/profile-activity";
 import { CountBadge, PROFILE_SHELF_STATUSES, ProfileShelf } from "@/components/profile-library";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
 import { GAME_ENTRY_STATUS_LABELS, type GameEntryProfile } from "@/lib/game-entry";
 import { getFollowButtonState, type ViewerRelationship } from "@/lib/profile-relationship";
 import { Route as RootRoute } from "@/routes/__root";
@@ -80,10 +79,6 @@ function PublicProfileContent({
   const [isFollowing, setIsFollowing] = useState(false);
   const [followError, setFollowError] = useState<string | null>(null);
 
-  async function signInWithTwitch() {
-    await authClient.signIn.social({ provider: "twitch" });
-  }
-
   async function followProfile() {
     setIsFollowing(true);
     setFollowError(null);
@@ -102,13 +97,9 @@ function PublicProfileContent({
       <section className="border-border/70 bg-card rounded-lg border p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
-            {user.image ? (
-              <img src={user.image} alt="" className="size-14 rounded-full object-cover" />
-            ) : (
-              <div className="bg-primary text-primary-foreground grid size-14 place-items-center rounded-full text-lg font-semibold">
-                {initials || <UserRound className="size-5" />}
-              </div>
-            )}
+            <div className="bg-primary text-primary-foreground grid size-14 place-items-center rounded-full text-lg font-semibold">
+              {initials || <UserRound className="size-5" />}
+            </div>
 
             <div className="min-w-0">
               <p className="text-muted-foreground text-sm">Public profile</p>
@@ -122,7 +113,6 @@ function PublicProfileContent({
             relationship={viewerRelationship}
             isSubmitting={isFollowing}
             onFollow={followProfile}
-            onSignIn={signInWithTwitch}
           />
         </div>
 
@@ -162,13 +152,11 @@ function FollowButton({
   isAuthenticated,
   isSubmitting,
   onFollow,
-  onSignIn,
   relationship,
 }: {
   isAuthenticated: boolean;
   isSubmitting: boolean;
   onFollow: () => void;
-  onSignIn: () => void;
   relationship: ViewerRelationship;
 }) {
   const state = getFollowButtonState({
@@ -183,9 +171,9 @@ function FollowButton({
 
   if (state.kind === "signIn") {
     return (
-      <Button variant="outline" onClick={onSignIn}>
+      <Link to="/sign-in" className={buttonVariants({ variant: "outline" })}>
         {state.label}
-      </Button>
+      </Link>
     );
   }
 
@@ -209,12 +197,5 @@ function getErrorMessage(error: unknown) {
 }
 
 function getInitials(value: string) {
-  return (
-    value
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join("") || "U"
-  );
+  return value.trim().slice(0, 2).toUpperCase() || "U";
 }

@@ -1,6 +1,7 @@
 import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
+import { lastLoginMethod, username } from "better-auth/plugins";
 
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
@@ -8,7 +9,6 @@ import { internalAction, query } from "./_generated/server";
 import authConfig from "./auth.config";
 
 const siteUrl = process.env.SITE_URL;
-const isDevAdminAuthEnabled = process.env.DEV_ADMIN_AUTH_ENABLED === "true";
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
@@ -23,17 +23,21 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
       },
     },
     emailAndPassword: {
-      enabled: isDevAdminAuthEnabled,
+      enabled: true,
       autoSignIn: true,
       requireEmailVerification: false,
     },
     socialProviders: {
+      github: {
+        clientId: process.env.GITHUB_CLIENT_ID as string,
+        clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
+      },
       twitch: {
         clientId: process.env.TWITCH_CLIENT_ID as string,
         clientSecret: process.env.TWITCH_CLIENT_SECRET as string,
       },
     },
-    plugins: [convex({ authConfig })],
+    plugins: [username({ minUsernameLength: 3 }), lastLoginMethod(), convex({ authConfig })],
   }) satisfies BetterAuthOptions;
 
 export const createAuth = (ctx: GenericCtx<DataModel>) => betterAuth(createAuthOptions(ctx));
