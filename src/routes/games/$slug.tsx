@@ -157,7 +157,7 @@ function GameDetail({
   const createPlaythrough = useMutation(api.gameEntries.createPlaythrough);
   const [isSavingEntry, setIsSavingEntry] = useState(false);
   const isEntryFormLoading = isEntryLoading;
-  const currentStatus = viewerEntry?.status ?? draftStatus;
+  const currentStatus = viewerEntry?.status ?? "backlog";
   const entryDialogValue: GameEntryFormValue = {
     status: draftStatus,
     rating: entryDialogMode === "replay" ? null : (viewerEntry?.rating ?? null),
