@@ -13,7 +13,7 @@ export const PROFILE_SHELF_STATUSES = ["playing", "backlog", "completed", "dropp
 
 export function CountBadge({ label, value }: { label: string; value: number }) {
   return (
-    <div className="min-w-0">
+    <div className="border-border/70 bg-background rounded-md border px-3 py-2">
       <p className="text-muted-foreground text-xs font-medium">{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
     </div>
