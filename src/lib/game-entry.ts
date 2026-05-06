@@ -113,5 +113,9 @@ export function formatActivityMessage({
     return isReplay ? `Completed a replay of ${name}` : `Completed ${name}`;
   }
 
-  return `Moved ${name} to ${GAME_ENTRY_STATUS_LABELS[toStatus]}`;
+  if (toStatus === "dropped") {
+    return `Dropped ${name}`;
+  }
+
+  return `Backlogged ${name}`;
 }

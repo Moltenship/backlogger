@@ -60,7 +60,7 @@ describe("game entry helpers", () => {
   });
 
   it("formats profile status activity messages", () => {
-    expect.assertions(4);
+    expect.assertions(5);
 
     expect(formatActivityMessage({ name: "Hades", toStatus: "playing", playthroughIndex: 1 })).toBe(
       "Started playing Hades",
@@ -72,7 +72,10 @@ describe("game entry helpers", () => {
       formatActivityMessage({ name: "Hades", toStatus: "completed", playthroughIndex: 2 }),
     ).toBe("Completed a replay of Hades");
     expect(formatActivityMessage({ name: "Hades", toStatus: "backlog", playthroughIndex: 1 })).toBe(
-      "Moved Hades to Backlog",
+      "Backlogged Hades",
+    );
+    expect(formatActivityMessage({ name: "Hades", toStatus: "dropped", playthroughIndex: 1 })).toBe(
+      "Dropped Hades",
     );
   });
 });
